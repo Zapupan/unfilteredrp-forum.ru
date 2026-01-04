@@ -174,11 +174,12 @@ CREATE TABLE IF NOT EXISTS `roblox_verifications` (
     `id` VARCHAR(36) PRIMARY KEY,
     `user_id` VARCHAR(36) NOT NULL,
     `roblox_nick` VARCHAR(100) DEFAULT NULL,
-    `verification_code` VARCHAR(50) DEFAULT NULL,
-    `is_verified` TINYINT(1) DEFAULT 0,
+    `roblox_user_id` VARCHAR(50) DEFAULT NULL,
+    `status` VARCHAR(20) DEFAULT 'pending',
+    `reject_reason` TEXT DEFAULT NULL,
     `created_at` DATETIME NOT NULL,
     INDEX `idx_user` (`user_id`),
-    INDEX `idx_verified` (`is_verified`),
+    INDEX `idx_status` (`status`),
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -7,11 +7,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Настройки подключения к MySQL
-// ЗАМЕНИТЕ НА ВАШИ ДАННЫЕ ИЗ ХОСТИНГА!
+// Настройки подключения к MySQL
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'u3372230_default', // Замените на вашего пользователя БД
-    password: process.env.DB_PASSWORD || '2zU57A3q7HdzliBz', // Замените на ваш пароль
+    user: process.env.DB_USER || 'u3372230_default',
+    password: process.env.DB_PASSWORD || '2zU57A3q7HdzliBz', // УКАЖИТЕ ПАРОЛЬ ОТ ПОЛЬЗОВАТЕЛЯ БД
     database: process.env.DB_NAME || 'u3372230_unfilteredrp-bd',
     charset: 'utf8mb4',
     waitForConnections: true,
