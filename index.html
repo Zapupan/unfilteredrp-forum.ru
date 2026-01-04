@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unfiltered RP | Официальный Форум</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icons8-roblox-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icons8-roblox-32.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="icons/icons8-roblox-64.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icons8-roblox-180.png">
+    <link rel="shortcut icon" href="icons/icons8-roblox-32.png">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -25,7 +30,7 @@
         <div class="nav-container">
             <a href="#" class="logo" onclick="goHome(); return false;">
                 <div class="logo-icon">
-                    <img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-logo-img">
+                    <img src="icons/icons8-roblox-40.png" alt="Roblox" class="roblox-logo-img">
                 </div>
                 <span class="logo-text">UNFILTERED RP</span>
             </a>
@@ -88,6 +93,10 @@
                             </a>
                             <a href="#" onclick="openSettings(); return false;">
                                 <i class="fas fa-cog"></i> Настройки
+                            </a>
+                            <hr>
+                            <a href="#" onclick="openAccountSwitcher(); return false;">
+                                <i class="fas fa-exchange-alt"></i> Сменить аккаунт
                             </a>
                             <div id="adminMenuItems" class="hidden">
                                 <hr>
@@ -358,7 +367,7 @@
                 <div class="footer-brand">
                     <a href="#" class="logo" onclick="goHome(); return false;">
                         <div class="logo-icon">
-                            <img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-logo-img">
+                            <img src="icons/icons8-roblox-40.png" alt="Roblox" class="roblox-logo-img">
                         </div>
                         <span class="logo-text">UNFILTERED RP</span>
                     </a>
@@ -568,10 +577,6 @@
                         <input type="text" id="settingsDiscord" placeholder="Ваш Discord (например: username#0000)">
                     </div>
                     <div class="form-group">
-                        <label><i class="fas fa-map-marker-alt"></i> Род</label>
-                        <input type="text" id="settingsRod" placeholder="Ваш род (например: Москва, СПБ и т.д.)">
-                    </div>
-                    <div class="form-group">
                         <label><i class="fas fa-envelope"></i> Email</label>
                         <input type="email" id="settingsEmail" placeholder="Ваш email">
                     </div>
@@ -589,6 +594,16 @@
                     </div>
                 </div>
 
+                <div class="settings-section" style="border-top: 2px solid var(--danger); padding-top: 20px; margin-top: 20px;">
+                    <h4 style="color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Опасная зона</h4>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
+                        Удаление аккаунта - необратимое действие. Все ваши данные будут удалены навсегда.
+                    </p>
+                    <button type="button" class="btn btn-danger" onclick="openDeleteAccountModal()">
+                        <i class="fas fa-trash"></i> Удалить аккаунт
+                    </button>
+                </div>
+
                 <div class="form-actions">
                     <button type="button" class="btn btn-glass" onclick="closeSettingsModal()">Отмена</button>
                     <button type="submit" class="btn btn-primary">
@@ -597,6 +612,61 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div class="modal-overlay" id="deleteAccountModal">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header" style="border-bottom: 2px solid var(--danger);">
+                <div>
+                    <h2 class="modal-title" style="color: var(--danger);">
+                        <i class="fas fa-exclamation-triangle"></i> Удаление аккаунта
+                    </h2>
+                    <p class="modal-subtitle">Это действие необратимо!</p>
+                </div>
+                <button class="modal-close" onclick="closeDeleteAccountModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div style="padding: 24px;">
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                    <h4 style="color: var(--danger); margin-bottom: 12px;">
+                        <i class="fas fa-exclamation-circle"></i> Внимание!
+                    </h4>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px;">
+                        <li>Все ваши данные будут удалены навсегда</li>
+                        <li>Все ваши посты и комментарии будут удалены</li>
+                        <li>Все ваши сообщения будут удалены</li>
+                        <li>Это действие невозможно отменить</li>
+                    </ul>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-key"></i> Введите пароль для подтверждения *</label>
+                    <input type="password" id="deleteAccountPassword" placeholder="Введите ваш пароль" class="form-control" autocomplete="current-password">
+                    <small style="color: var(--text-muted); margin-top: 8px; display: block;">
+                        Для подтверждения удаления введите ваш текущий пароль
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="deleteAccountConfirm">
+                        <span>Я понимаю, что это действие необратимо и все мои данные будут удалены</span>
+                    </label>
+                </div>
+
+                <div class="form-actions" style="margin-top: 24px;">
+                    <button type="button" class="btn btn-glass" onclick="closeDeleteAccountModal()">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDeleteAccount()">
+                        <i class="fas fa-trash"></i> Удалить аккаунт навсегда
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -795,8 +865,8 @@
         <div class="modal modal-lg" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <div>
-                    <h2 class="modal-title">Правила игры</h2>
-                    <p class="modal-subtitle">Unfiltered RP - Пункт 2</p>
+                    <h2 class="modal-title">Правила</h2>
+                    <p class="modal-subtitle">Unfiltered RP - Все пункты</p>
                 </div>
                 <button class="modal-close" onclick="closeRulesModal()">
                     <i class="fas fa-times"></i>
@@ -806,6 +876,70 @@
                 <div class="rules-warning">
                     <i class="fas fa-exclamation-triangle"></i>
                     <p>Незнание правил не освобождает от ответственности! Перед началом игры обязательно прочитайте все правила.</p>
+                </div>
+
+                <div class="rule-section-title">
+                    <h3>Пункт 1. Правила Discord сервера</h3>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.1</div>
+                    <div class="rule-content">
+                        <h4>Запрещены оскорбления кого и чего либо (Есть исключения)</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 5м мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.2</div>
+                    <div class="rule-content">
+                        <h4>Запрещен оффтоп</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 5м мута - 1ч мута</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.3</div>
+                    <div class="rule-content">
+                        <h4>Запрещен спам</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 5м мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.4</div>
+                    <div class="rule-content">
+                        <h4>Запрещено любое проявление расизма</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 15м мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.5</div>
+                    <div class="rule-content">
+                        <h4>Запрещена пропаганда чего либо</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 30м мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.6</div>
+                    <div class="rule-content">
+                        <h4>Запрещено любой упоминание политики</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 3ч мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">1.7</div>
+                    <div class="rule-content">
+                        <h4>Запрещен 18+ контент</h4>
+                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 3ч мута - бан</p>
+                    </div>
+                </div>
+
+                <div class="rule-section-title" style="margin-top: 32px;">
+                    <h3>Пункт 2. Правила игры</h3>
                 </div>
 
                 <div class="rule-item">
@@ -819,8 +953,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.2</div>
                     <div class="rule-content">
-                        <h4>Запрещен PG (Powergaming)</h4>
-                        <p class="rule-desc">Навязывание действий другим игрокам, игра за других персонажей</p>
+                        <h4>Запрещен PG</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 5ч ИРП - 3д ИРП</p>
                     </div>
                 </div>
@@ -828,8 +961,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.3</div>
                     <div class="rule-content">
-                        <h4>Запрещен MG (Metagaming)</h4>
-                        <p class="rule-desc">Использование OOC информации в RP ситуациях</p>
+                        <h4>Запрещен MG</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 5ч ИРП - бан</p>
                     </div>
                 </div>
@@ -837,8 +969,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.4</div>
                     <div class="rule-content">
-                        <h4>Запрещен RK (Revenge Kill)</h4>
-                        <p class="rule-desc">Месть за смерть персонажа</p>
+                        <h4>Запрещен RK</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 1ч ИРП - 3д ИРП</p>
                     </div>
                 </div>
@@ -854,8 +985,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.6</div>
                     <div class="rule-content">
-                        <h4>Запрещен уход от РП</h4>
-                        <p class="rule-desc">Если у вас вылетела игра или по какой-то причине вы вышли во время взаимодействия с игроками, вы обязаны вернуться в игру не менее чем за 5 минут.</p>
+                        <h4>Запрещен уход от РП. Если у вас вылетела игра или еще по какой то причине вы вышли с игры во время какого либо взаимодействия с игроками вы обязаны вернутся в игру не менее чем за 5 минут.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 1ч ИРП - 3д ИРП</p>
                     </div>
                 </div>
@@ -863,7 +993,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.7</div>
                     <div class="rule-content">
-                        <h4>Запрещено находиться в OOC без весомых причин</h4>
+                        <h4>Запрещено находиться в OOC без весомых на это причин.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: 1ч ИРП - 3ч ИРП</p>
                     </div>
                 </div>
@@ -871,7 +1001,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.8</div>
                     <div class="rule-content">
-                        <h4>Запрещены реальные или персонажи из фильмов/сериалов/игр</h4>
+                        <h4>Запрещены реальные или персонажи из фильмов/сериалов/игр.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: Удаление персонажа</p>
                     </div>
                 </div>
@@ -879,7 +1009,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.10</div>
                     <div class="rule-content">
-                        <h4>Запрещены суперспособности, магия и фэнтези персонажи</h4>
+                        <h4>Запрещены какие либо суперспособности, магия и фэнтези персонажи.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: Удаление персонажа</p>
                     </div>
                 </div>
@@ -887,7 +1017,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.11</div>
                     <div class="rule-content">
-                        <h4>Запрещены НРП скины</h4>
+                        <h4>Запрещены НРП скины.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: Удаление персонажа</p>
                     </div>
                 </div>
@@ -895,8 +1025,7 @@
                 <div class="rule-item">
                     <div class="rule-number">2.12</div>
                     <div class="rule-content">
-                        <h4>Все отыгровки обязаны быть понятны</h4>
-                        <p class="rule-desc">Написаны на русском языке, запрещены какие-либо сокращения слов</p>
+                        <h4>Все отыгровки обязаны быть понятны и написаны на русском языке, запрещены какие либо сокращения тех или иных слов.</h4>
                         <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: Полный откат ситуации</p>
                     </div>
                 </div>
@@ -904,8 +1033,46 @@
                 <div class="rule-item">
                     <div class="rule-number">2.13</div>
                     <div class="rule-content">
-                        <h4>Запрещено использовать РП биндеры и АХК</h4>
-                        <p class="rule-punishment"><i class="fas fa-gavel"></i> Наказание: мут 1 час / бан на 45 минут</p>
+                        <h4>Запрещено использовать какие либо рп биндеры и ахк. Наказание: мут 1 час/бан на 45 минут</h4>
+                    </div>
+                </div>
+
+                <div class="rule-section-title" style="margin-top: 32px;">
+                    <h3>Пункт 3. Правила КРП</h3>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">3.1</div>
+                    <div class="rule-content">
+                        <h4>Запрещено выстреливать более одной обоймы не отыгрывая перезарядку оружия, что бы иметь более одной обоймы вы обязаны отыграть их покупку.</h4>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">3.2</div>
+                    <div class="rule-content">
+                        <h4>Запрещено носить большие оружия такие как Биты, дробовики, автоматы, ружья и т.д. у себя в карманах. (либо в руках, либо в рюкзаке/сумке)</h4>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">3.3</div>
+                    <div class="rule-content">
+                        <h4>Замах не обязателен, но стоит учитывать то что удар с замахом будет в разы сильнее.</h4>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">3.4</div>
+                    <div class="rule-content">
+                        <h4>Увернуться возможно только если соперник делает удар с замахом или если вы отыграли свою готовность к его удару ранее.</h4>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-number">3.5</div>
+                    <div class="rule-content">
+                        <h4>Вы не обязаны снимать оружие с предохранителя если вы его до этого не ставили.</h4>
                     </div>
                 </div>
             </div>
@@ -1207,7 +1374,7 @@
                     <div class="admin-menu-category">
                         <div class="admin-menu-category-title">Управление</div>
                         <button class="admin-menu-item" onclick="switchAdminTab('users')">
-                            <i class="fas fa-users"></i>
+                            <img src="icons/icons8-roblox-38.png" alt="Roblox">
                             <span>Пользователи</span>
                         </button>
                         <button class="admin-menu-item" onclick="switchAdminTab('staff')">
@@ -1230,6 +1397,11 @@
                             <i class="fas fa-file-signature"></i>
                             <span>Заявки</span>
                             <span id="applicationsCount" class="tab-badge hidden">0</span>
+                        </button>
+                        <button class="admin-menu-item" onclick="switchAdminTab('verifications')">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Верификации</span>
+                            <span id="verificationsCount" class="tab-badge hidden">0</span>
                         </button>
                     </div>
                     
@@ -1280,6 +1452,8 @@
                         <option value="helper">Хелперы</option>
                         <option value="moderator">Модераторы</option>
                         <option value="admin">Админы</option>
+                        <option value="senior_admin">Старшие администраторы</option>
+                        <option value="manager">Менеджеры проекта</option>
                         <option value="management">Руководство</option>
                     </select>
                     <button class="btn btn-primary btn-sm" onclick="loadAdminUsers()">
@@ -1324,6 +1498,18 @@
                                 <div class="staff-list" id="staffManagement"></div>
                             </div>
                             <div class="staff-category">
+                                <div class="staff-category-header manager">
+                                    <i class="fas fa-briefcase"></i> Менеджеры проекта
+                                </div>
+                                <div class="staff-list" id="staffManagers"></div>
+                            </div>
+                            <div class="staff-category">
+                                <div class="staff-category-header senior-admin">
+                                    <i class="fas fa-crown"></i> Старшие администраторы
+                                </div>
+                                <div class="staff-list" id="staffSeniorAdmins"></div>
+                            </div>
+                            <div class="staff-category">
                                 <div class="staff-category-header admin">
                                     <i class="fas fa-crown"></i> Администраторы
                                 </div>
@@ -1362,6 +1548,25 @@
                 
                 <div class="admin-applications-list" id="adminApplicationsList">
                     <!-- Applications will be loaded here -->
+                </div>
+            </div>
+            
+            <!-- Verifications Tab -->
+            <div class="admin-tab-content" id="adminTabVerifications">
+                <div class="admin-toolbar">
+                    <select id="adminVerStatus" onchange="loadAdminVerifications()">
+                        <option value="pending">Ожидают рассмотрения</option>
+                        <option value="approved">Одобренные</option>
+                        <option value="rejected">Отклонённые</option>
+                        <option value="all">Все верификации</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="loadAdminVerifications()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                
+                <div class="admin-applications-list" id="adminVerificationsList">
+                    <!-- Verifications will be loaded here -->
                 </div>
             </div>
             
@@ -1563,6 +1768,28 @@
                 </div>
             </div>
             
+            <!-- Mute Reason Modal -->
+            <div class="admin-input-modal hidden" id="muteReasonModal">
+                <div class="admin-input-card">
+                    <h3><i class="fas fa-volume-mute"></i> Замутить пользователя</h3>
+                    <p class="modal-subtitle" id="muteUserName">Пользователь</p>
+                    <div class="form-group">
+                        <label><i class="fas fa-comment"></i> Причина мута</label>
+                        <textarea id="muteReasonInput" rows="3" placeholder="Укажите причину мута..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-clock"></i> Длительность (минуты, необязательно)</label>
+                        <input type="number" id="muteDurationInput" min="1" placeholder="Оставьте пустым для постоянного мута">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-glass" onclick="closeMuteModal()">Отмена</button>
+                        <button class="btn btn-warning" onclick="confirmMute()">
+                            <i class="fas fa-volume-mute"></i> Замутить
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Reject Reason Modal -->
             <div class="admin-input-modal hidden" id="rejectReasonModal">
                 <div class="admin-input-card">
@@ -1679,7 +1906,7 @@
         <div class="modal modal-lg" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <div>
-                    <h2 class="modal-title"><img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-icon" width="20" height="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"> Верификация Roblox</h2>
+                    <h2 class="modal-title"><img src="icons/icons8-roblox-40.png" alt="Roblox" class="roblox-icon" width="20" height="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"> Верификация Roblox</h2>
                     <p class="modal-subtitle">Подтвердите, что вы владеете аккаунтом <span id="robloxNickDisplay"></span></p>
                 </div>
                 <button class="modal-close" onclick="closeRobloxVerifyModal()">
@@ -1713,6 +1940,50 @@
                             <i class="fas fa-check-circle"></i> Подтвердить
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Switcher Modal -->
+    <div class="modal-overlay" id="accountSwitcherModal">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title"><i class="fas fa-exchange-alt"></i> Смена аккаунта</h2>
+                    <p class="modal-subtitle">Переключение между аккаунтами</p>
+                </div>
+                <button class="modal-close" onclick="closeAccountSwitcher()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="account-switcher-content">
+                <div class="current-account-section">
+                    <h4><i class="fas fa-user-circle"></i> Текущий аккаунт</h4>
+                    <div class="current-account-card" id="currentAccountCard">
+                        <!-- Текущий аккаунт будет здесь -->
+                    </div>
+                </div>
+
+                <div class="saved-accounts-section">
+                    <div class="section-header">
+                        <h4><i class="fas fa-users"></i> Сохраненные аккаунты</h4>
+                        <span class="accounts-count" id="accountsCount">0</span>
+                    </div>
+                    
+                    <div class="accounts-list" id="accountsList">
+                        <!-- Список аккаунтов будет здесь -->
+                    </div>
+                </div>
+                
+                <div class="account-switcher-actions">
+                    <button class="btn btn-primary" onclick="openAuthModal('login'); closeAccountSwitcher();">
+                        <i class="fas fa-sign-in-alt"></i> Войти в другой аккаунт
+                    </button>
+                    <button class="btn btn-glass" onclick="closeAccountSwitcher()">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
                 </div>
             </div>
         </div>

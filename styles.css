@@ -1107,6 +1107,12 @@ body {
     border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
+.status-open-alt {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 .status-closed {
     background: rgba(239, 68, 68, 0.2);
     color: #f87171;
@@ -1613,6 +1619,27 @@ body {
     margin-bottom: 8px;
 }
 
+.checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin-top: 4px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.checkbox-label span {
+    flex: 1;
+    line-height: 1.5;
+}
+
 .form-group input,
 .form-group textarea,
 .form-group select {
@@ -1996,6 +2023,26 @@ body {
 
 .rule-section {
     margin-bottom: 24px;
+}
+
+.rule-section-title {
+    margin: 32px 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+}
+
+.rule-section-title:first-child {
+    margin-top: 0;
+}
+
+.rule-section-title h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-400);
+    margin: 0;
 }
 
 .rule-section h3 {
@@ -2955,6 +3002,18 @@ body {
     border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
+.profile-role-badge.role-senior_admin {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+.profile-role-badge.role-manager {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
 .profile-role-badge.role-management {
     background: rgba(239, 68, 68, 0.2);
     color: #f87171;
@@ -3251,6 +3310,13 @@ body {
     text-align: center;
     font-size: 16px;
     flex-shrink: 0;
+}
+
+.admin-menu-item img {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    object-fit: contain;
 }
 
 .admin-menu-item span {
@@ -3728,6 +3794,20 @@ body {
     background: rgba(168, 85, 247, 0.2);
     color: #c084fc;
     border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.staff-category-header.manager {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.staff-category-header.senior-admin {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .staff-category-header.helper {
@@ -4739,4 +4819,363 @@ input:checked + .slider:before {
 
 .admin-user-row .info, .admin-post-row > div {
     flex: 1;
+}
+
+/* ===== ACCOUNT SWITCHER ===== */
+.account-switcher-content {
+    padding: 24px;
+}
+
+.current-account-section {
+    margin-bottom: 32px;
+}
+
+.current-account-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.current-account-section h4 i {
+    color: var(--primary-color);
+}
+
+.current-account-card {
+    margin-bottom: 8px;
+}
+
+.account-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+    background: var(--glass-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 14px;
+    transition: all 0.3s ease;
+    margin-bottom: 12px;
+}
+
+.account-card:hover {
+    background: var(--glass-hover);
+    transform: translateX(5px);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.account-card.active {
+    border-color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+}
+
+.account-card.empty {
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.account-card.empty i {
+    font-size: 48px;
+    opacity: 0.3;
+}
+
+.account-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    flex-shrink: 0;
+    border: 2px solid var(--border-color);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.account-card.active .account-avatar {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+.account-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.account-name {
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-details {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.account-details span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.account-details i {
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.account-date {
+    color: var(--text-muted);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.account-date i {
+    font-size: 10px;
+}
+
+.account-badge-current {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--success);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.account-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.account-actions .btn {
+    padding: 10px 16px;
+    min-width: auto;
+    font-size: 13px;
+}
+
+.account-actions .btn-danger {
+    padding: 10px 14px;
+}
+
+.saved-accounts-section {
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.section-header h4 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 600;
+    margin: 0;
+}
+
+.section-header h4 i {
+    color: var(--primary-color);
+}
+
+.accounts-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 10px;
+    background: rgba(59, 130, 246, 0.2);
+    color: var(--primary-color);
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.accounts-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.accounts-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.accounts-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.accounts-list::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 3px;
+}
+
+.empty-accounts {
+    text-align: center;
+    padding: 50px 20px;
+    color: var(--text-muted);
+}
+
+.empty-accounts i {
+    display: block;
+    margin-bottom: 16px;
+}
+
+.empty-accounts p {
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 8px 0;
+}
+
+.account-switcher-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.account-switcher-actions .btn {
+    flex: 1;
+    max-width: 280px;
+}
+
+/* Совместимость со старыми классами */
+.profile-manager-content {
+    padding: 24px;
+}
+
+.profiles-list {
+    max-height: 450px;
+    overflow-y: auto;
+    margin-bottom: 24px;
+    padding-right: 8px;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+}
+
+.profile-item:hover {
+    background: var(--glass-hover);
+    transform: translateX(5px);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.profile-item.active {
+    border-color: var(--primary-color);
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+.profile-item-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+    border: 2px solid var(--border-color);
+    overflow: hidden;
+}
+
+.profile-item.active .profile-item-avatar {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+.profile-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-item-name {
+    font-weight: 600;
+    font-size: 17px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-item-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.profile-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.profile-item-actions .btn {
+    padding: 10px 16px;
+    min-width: auto;
+    font-size: 13px;
+}
+
+.empty-profiles {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.profile-manager-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
 }

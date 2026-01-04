@@ -1,8 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
-const sql = require('sql.js');
+const Database = require('better-sqlite3');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,14 +16,16 @@ let db;
 const dbPath = path.join(__dirname, 'forum.db');
 
 function initDB() {
-    if (fs.existsSync(dbPath)) {
-        const buffer = fs.readFileSync(dbPath);
-        db = new sql.Database(buffer);
-        console.log('База данных загружена');
-    } else {
-        db = new sql.Database();
+    const dbExists = require('fs').existsSync(dbPath);
+    
+    db = new Database(dbPath);
+    
+    // Включаем поддержку внешних ключей
+    db.pragma('foreign_keys = ON');
+    
+    if (!dbExists) {
         // Создание таблиц
-        db.run(`
+        db.exec(`
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -51,7 +52,7 @@ function initDB() {
             )
         `);
         
-        db.run(`
+        db.exec(`
             CREATE TABLE IF NOT EXISTS posts (
                 id TEXT PRIMARY KEY,
                 category TEXT NOT NULL,
@@ -70,7 +71,7 @@ function initDB() {
             )
         `);
         
-        db.run(`
+        db.exec(`
             CREATE TABLE IF NOT EXISTS comments (
                 id TEXT PRIMARY KEY,
                 post_id TEXT NOT NULL,
@@ -83,7 +84,7 @@ function initDB() {
             )
         `);
         
-        db.run(`
+        db.exec(`
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
                 sender_id TEXT NOT NULL,
@@ -99,20 +100,16 @@ function initDB() {
         // Создание админа по умолчанию
         const adminId = Date.now().toString(36) + Math.random().toString(36).substr(2);
         const now = new Date().toISOString();
-        db.run(`
+        const stmt = db.prepare(`
             INSERT INTO users (id, username, email, password, roblox_nick, avatar, role, is_email_verified, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [adminId, 'Admin', 'admin@unfilteredrp.com', 'admin123', 'AdminRP', '👑', 'management', 1, now, now]);
+        `);
+        stmt.run(adminId, 'Admin', 'admin@unfilteredrp.com', hashPassword('admin123'), 'AdminRP', '👑', 'management', 1, now, now);
         
-        saveDB();
         console.log('База данных создана с админом по умолчанию (admin@unfilteredrp.com / admin123)');
+    } else {
+        console.log('База данных загружена');
     }
-}
-
-function saveDB() {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(dbPath, buffer);
 }
 
 // Простой хеш пароля (в продакшене используйте bcrypt)
@@ -136,7 +133,8 @@ app.post('/api/auth/register', (req, res) => {
         }
         
         // Проверка существующего пользователя
-        const existing = db.exec(`SELECT id FROM users WHERE username = '${username}' OR email = '${email}'`);
+        const stmt = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?');
+        const existing = stmt.all(username, email.toLowerCase());
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Пользователь с таким именем или email уже существует' });
         }
@@ -146,12 +144,11 @@ app.post('/api/auth/register', (req, res) => {
         const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
         const codeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         
-        db.run(`
+        const insertStmt = db.prepare(`
             INSERT INTO users (id, username, email, password, roblox_nick, rod, avatar, role, email_code, email_code_expires, created_at, updated_at, is_online)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [id, username, email.toLowerCase(), hashPassword(password), robloxNick, rod, '🎮', 'user', emailCode, codeExpires, now, now, 1]);
-        
-        saveDB();
+        `);
+        insertStmt.run(id, username, email.toLowerCase(), hashPassword(password), robloxNick, rod, '🎮', 'user', emailCode, codeExpires, now, now, 1);
         
         res.json({
             token: 'token_' + id,
@@ -175,64 +172,41 @@ app.post('/api/auth/login', (req, res) => {
     try {
         const { username, password } = req.body;
         
-        const result = db.exec(`SELECT * FROM users WHERE username = '${username}'`);
-        if (result.length === 0 || result[0].values.length === 0) {
+        const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
+        const rows = stmt.all(username);
+        if (rows.length === 0) {
             return res.status(401).json({ error: 'Неверный логин или пароль' });
         }
         
-        const user = result[0].values[0];
-        const userObj = {
-            id: user[0],
-            username: user[1],
-            email: user[2],
-            password: user[3],
-            roblox_nick: user[4],
-            rod: user[5],
-            discord: user[6],
-            avatar: user[7],
-            avatar_url: user[8],
-            role: user[9],
-            reputation: user[10],
-            is_email_verified: user[11],
-            is_roblox_verified: user[12],
-            is_banned: user[13],
-            ban_reason: user[14],
-            roblox_user_id: user[15],
-            email_code: user[16],
-            email_code_expires: user[17],
-            is_online: user[18],
-            last_seen: user[19],
-            created_at: user[20],
-            updated_at: user[21]
-        };
+        const user = rows[0];
         
-        if (userObj.password !== hashPassword(password)) {
+        if (user.password !== hashPassword(password)) {
             return res.status(401).json({ error: 'Неверный логин или пароль' });
         }
         
-        if (userObj.is_banned) {
-            return res.status(403).json({ error: 'Аккаунт заблокирован: ' + (userObj.ban_reason || 'Причина не указана') });
+        if (user.is_banned) {
+            return res.status(403).json({ error: 'Аккаунт заблокирован: ' + (user.ban_reason || 'Причина не указана') });
         }
         
-        db.run(`UPDATE users SET is_online = 1, last_seen = '${new Date().toISOString()}' WHERE id = '${userObj.id}'`);
-        saveDB();
+        const updateStmt = db.prepare('UPDATE users SET is_online = 1, last_seen = ? WHERE id = ?');
+        updateStmt.run(new Date().toISOString(), user.id);
         
         res.json({
-            token: 'token_' + userObj.id,
+            token: 'token_' + user.id,
             user: {
-                id: userObj.id,
-                username: userObj.username,
-                email: userObj.email,
-                roblox_nick: userObj.roblox_nick,
-                rod: userObj.rod,
-                discord: userObj.discord,
-                avatar: userObj.avatar,
-                avatar_url: userObj.avatar_url,
-                role: userObj.role,
-                reputation: userObj.reputation || 0,
-                is_email_verified: userObj.is_email_verified,
-                is_roblox_verified: userObj.is_roblox_verified,
-                created_at: userObj.created_at
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                roblox_nick: user.roblox_nick,
+                rod: user.rod,
+                discord: user.discord,
+                avatar: user.avatar,
+                avatar_url: user.avatar_url,
+                role: user.role,
+                reputation: user.reputation || 0,
+                is_email_verified: user.is_email_verified,
+                is_roblox_verified: user.is_roblox_verified,
+                created_at: user.created_at
             }
         });
     } catch (error) {
@@ -249,10 +223,28 @@ app.post('/api/*', (req, res) => {
     res.status(404).json({ error: 'Endpoint not implemented yet' });
 });
 
+// Graceful shutdown
+process.on('SIGINT', () => {
+    if (db) {
+        db.close();
+    }
+    process.exit(0);
+});
+
 // Запуск сервера
 initDB();
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-    console.log(`Откройте http://localhost:${PORT}`);
+    console.log('');
+    console.log('╔════════════════════════════════════════╗');
+    console.log('║   СЕРВЕР УСПЕШНО ЗАПУЩЕН! ✓          ║');
+    console.log('╚════════════════════════════════════════╝');
+    console.log('');
+    console.log(`🌐 Сервер работает на: http://localhost:${PORT}`);
+    console.log(`📡 Порты: ${PORT}`);
+    console.log('');
+    console.log('✅ База данных подключена');
+    console.log('✅ API готов к работе');
+    console.log('');
+    console.log('💡 Чтобы остановить сервер, нажмите: Ctrl + C');
+    console.log('');
 });
-

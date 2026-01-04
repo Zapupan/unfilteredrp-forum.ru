@@ -163,8 +163,8 @@ const ROLES_INFO = {
     'helper': { level: 1, name: 'Хелпер', icon: 'fa-hands-helping', color: '#22c55e' },
     'moderator': { level: 2, name: 'Модератор', icon: 'fa-shield-alt', color: '#a855f7' },
     'admin': { level: 3, name: 'Администратор', icon: 'fa-crown', color: '#f59e0b' },
-    'senior_admin': { level: 3.5, name: 'Старший администратор', icon: 'fa-crown', color: '#f97316' },
-    'project_manager': { level: 4, name: 'Менеджер проекта', icon: 'fa-briefcase', color: '#ec4899' },
+    'senior_admin': { level: 3.5, name: 'Старший администратор', icon: 'fa-crown', color: '#8b5cf6' },
+    'manager': { level: 4, name: 'Менеджер проекта', icon: 'fa-briefcase', color: '#ffffff' },
     'management': { level: 5, name: 'Руководство', icon: 'fa-star', color: '#ef4444' }
 };
 
@@ -270,6 +270,9 @@ const api = {
             } else if (endpoint.startsWith('/users/') && method === 'PUT') {
                 const userId = endpoint.split('/users/')[1];
                 return this.handleUpdateUser(userId, body);
+            } else if (endpoint.startsWith('/users/') && endpoint.includes('/delete-account') && method === 'POST') {
+                const userId = endpoint.split('/users/')[1].split('/')[0];
+                return this.handleDeleteOwnAccount(userId, body);
             } else if (endpoint.startsWith('/users/online/list') && method === 'GET') {
                 return this.handleGetOnlineUsers();
             } else if (endpoint.startsWith('/users/avatar/upload') && method === 'POST') {
@@ -296,6 +299,12 @@ const api = {
             } else if (endpoint.startsWith('/admin/users/') && method === 'POST' && endpoint.includes('/unban')) {
                 const userId = endpoint.split('/admin/users/')[1].split('/')[0];
                 return this.handleUnbanUser(userId);
+            } else if (endpoint.startsWith('/admin/users/') && method === 'POST' && endpoint.includes('/mute')) {
+                const userId = endpoint.split('/admin/users/')[1].split('/')[0];
+                return this.handleMuteUser(userId, body);
+            } else if (endpoint.startsWith('/admin/users/') && method === 'POST' && endpoint.includes('/unmute')) {
+                const userId = endpoint.split('/admin/users/')[1].split('/')[0];
+                return this.handleUnmuteUser(userId);
             } else if (endpoint.startsWith('/admin/users/') && method === 'DELETE') {
                 const userId = endpoint.split('/admin/users/')[1];
                 return this.handleDeleteUser(userId);
@@ -327,6 +336,17 @@ const api = {
                 }));
             } else if (endpoint.startsWith('/admin-applications') && method === 'POST') {
                 return this.handleCreateApplication(body);
+            } else if (endpoint.startsWith('/admin/verifications') && method === 'GET') {
+                if (endpoint.includes('/count')) {
+                    return this.handleGetVerificationsCount();
+                }
+                return this.handleGetAdminVerifications(url);
+            } else if (endpoint.startsWith('/admin/verifications/') && method === 'POST' && endpoint.includes('/approve')) {
+                const verId = endpoint.split('/admin/verifications/')[1].split('/')[0];
+                return this.handleApproveVerification(verId);
+            } else if (endpoint.startsWith('/admin/verifications/') && method === 'POST' && endpoint.includes('/reject')) {
+                const verId = endpoint.split('/admin/verifications/')[1].split('/')[0];
+                return this.handleRejectVerification(verId, body);
             }
             
             throw new Error('Endpoint not found');
@@ -492,17 +512,23 @@ const api = {
             throw new Error('User ID должен быть числом');
         }
         
-        // Сохраняем User ID и верифицируем аккаунт
+        // Проверяем, есть ли уже активная заявка на верификацию
+        const existing = DB.getAll('roblox_verifications', v => v.user_id === userId && v.status === 'pending');
+        if (existing.length > 0) {
+            throw new Error('У вас уже есть заявка на верификацию, ожидающая рассмотрения');
+        }
+        
+        // Сохраняем User ID (но не верифицируем автоматически)
         DB.update('users', userId, { 
-            is_roblox_verified: true,
             roblox_user_id: robloxUserId.toString()
         });
         
+        // Создаем заявку на верификацию
         DB.insert('roblox_verifications', {
             user_id: userId,
             roblox_nick: user.roblox_nick,
             roblox_user_id: robloxUserId.toString(),
-            status: 'verified',
+            status: 'pending',
             created_at: new Date().toISOString()
         });
         
@@ -538,7 +564,11 @@ const api = {
             if (existing.length > 0) throw new Error('Имя пользователя уже используется');
             changes.username = updates.username;
         }
-        if (updates.robloxNick) changes.roblox_nick = updates.robloxNick;
+        if (updates.robloxNick && updates.robloxNick !== user.roblox_nick) {
+            changes.roblox_nick = updates.robloxNick;
+            // При смене ника Roblox верификация сбрасывается
+            changes.is_roblox_verified = false;
+        }
         if (updates.discord !== undefined) changes.discord = updates.discord || null;
         if (updates.rod !== undefined) changes.rod = updates.rod ? updates.rod.trim() : null;
         if (updates.email && updates.email !== user.email) {
@@ -934,6 +964,7 @@ const api = {
         
         const postsByStatus = {
             open: posts.filter(p => p.status === 'open').length,
+            accepted: posts.filter(p => p.status === 'accepted').length,
             approved: posts.filter(p => p.status === 'approved').length,
             rejected: posts.filter(p => p.status === 'rejected').length,
             resolved: posts.filter(p => p.status === 'resolved').length
@@ -944,6 +975,8 @@ const api = {
             helper: users.filter(u => u.role === 'helper').length,
             moderator: users.filter(u => u.role === 'moderator').length,
             admin: users.filter(u => u.role === 'admin').length,
+            senior_admin: users.filter(u => u.role === 'senior_admin').length,
+            manager: users.filter(u => u.role === 'manager').length,
             management: users.filter(u => u.role === 'management').length
         };
         
@@ -1063,6 +1096,50 @@ const api = {
             user_id: currentUserId,
             action: 'unban_user',
             details: `Разбанен пользователь ${targetUser.username}`
+        });
+        return { success: true };
+    },
+    
+    handleMuteUser(userId, { reason, duration }) {
+        const currentUserId = this.getUserId();
+        const currentUser = DB.get('users', currentUserId);
+        const targetUser = DB.get('users', userId);
+        
+        if (!currentUser || !targetUser) throw new Error('User not found');
+        const targetUserLevel = ROLES_INFO[targetUser.role]?.level || 0;
+        if (targetUserLevel >= 5) {
+            throw new Error('Нельзя замутить руководство');
+        }
+        if (userId === currentUserId) {
+            throw new Error('Нельзя замутить самого себя');
+        }
+        
+        // Вычисляем время окончания мута (duration в минутах)
+        const muteExpiresAt = duration ? new Date(Date.now() + duration * 60 * 1000).toISOString() : null;
+        
+        DB.update('users', userId, { 
+            is_muted: true, 
+            mute_reason: reason || 'Нарушение правил',
+            mute_expires_at: muteExpiresAt
+        });
+        
+        DB.insert('activity_log', {
+            user_id: currentUserId,
+            action: 'mute_user',
+            details: `Замучен пользователь ${targetUser.username}: ${reason || 'Нарушение правил'}${duration ? ` на ${duration} минут` : ''}`
+        });
+        return { success: true };
+    },
+    
+    handleUnmuteUser(userId) {
+        const currentUserId = this.getUserId();
+        const targetUser = DB.get('users', userId);
+        if (!targetUser) throw new Error('User not found');
+        DB.update('users', userId, { is_muted: false, mute_reason: null, mute_expires_at: null });
+        DB.insert('activity_log', {
+            user_id: currentUserId,
+            action: 'unmute_user',
+            details: `Снят мут с пользователя ${targetUser.username}`
         });
         return { success: true };
     },
@@ -1220,6 +1297,118 @@ const api = {
         return { success: true };
     },
     
+    handleGetAdminVerifications(url) {
+        const params = new URLSearchParams(url.search);
+        const status = params.get('status') || 'pending';
+        let verifications = DB.getAll('roblox_verifications');
+        if (status !== 'all') {
+            verifications = verifications.filter(v => v.status === status);
+        }
+        verifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        return verifications.map(v => {
+            const user = DB.get('users', v.user_id);
+            return {
+                ...v,
+                username: user ? user.username : 'Unknown',
+                user: user ? this.formatUser(user) : null
+            };
+        });
+    },
+    
+    handleGetVerificationsCount() {
+        const pending = DB.getAll('roblox_verifications', v => v.status === 'pending').length;
+        return { count: pending };
+    },
+    
+    handleApproveVerification(verId) {
+        const currentUserId = this.getUserId();
+        const verification = DB.get('roblox_verifications', verId);
+        if (!verification) throw new Error('Verification not found');
+        
+        // Верифицируем пользователя
+        DB.update('users', verification.user_id, { 
+            is_roblox_verified: true,
+            roblox_user_id: verification.roblox_user_id
+        });
+        
+        // Обновляем статус верификации
+        DB.update('roblox_verifications', verId, { status: 'approved' });
+        
+        // Отправляем сообщение пользователю
+        const adminUser = DB.get('users', currentUserId);
+        const now = new Date().toISOString();
+        DB.insert('messages', {
+            sender_id: currentUserId,
+            receiver_id: verification.user_id,
+            content: `Ваша верификация Roblox для ника "${verification.roblox_nick}" была одобрена.`,
+            is_read: false,
+            created_at: now
+        });
+        
+        // Добавляем уведомление
+        DB.insert('notifications', {
+            user_id: verification.user_id,
+            type: 'verification',
+            title: 'Верификация одобрена',
+            message: `Ваша верификация Roblox для ника "${verification.roblox_nick}" была одобрена.`,
+            link: '#profile',
+            is_read: false,
+            created_at: now
+        });
+        
+        DB.insert('activity_log', {
+            user_id: currentUserId,
+            action: 'approve_verification',
+            details: `Одобрена верификация Roblox для пользователя ${verification.user_id} (${verification.roblox_nick})`
+        });
+        
+        return { success: true };
+    },
+    
+    handleRejectVerification(verId, { reason }) {
+        const currentUserId = this.getUserId();
+        const verification = DB.get('roblox_verifications', verId);
+        if (!verification) throw new Error('Verification not found');
+        
+        // Обновляем статус верификации
+        DB.update('roblox_verifications', verId, { status: 'rejected', reject_reason: reason || null });
+        
+        // Отправляем сообщение пользователю
+        const now = new Date().toISOString();
+        const messageText = reason 
+            ? `Ваша верификация Roblox для ника "${verification.roblox_nick}" была отклонена. Причина: ${reason}`
+            : `Ваша верификация Roblox для ника "${verification.roblox_nick}" была отклонена.`;
+        
+        DB.insert('messages', {
+            sender_id: currentUserId,
+            receiver_id: verification.user_id,
+            content: messageText,
+            is_read: false,
+            created_at: now
+        });
+        
+        // Добавляем уведомление
+        DB.insert('notifications', {
+            user_id: verification.user_id,
+            type: 'verification',
+            title: 'Верификация отклонена',
+            message: reason 
+                ? `Ваша верификация Roblox для ника "${verification.roblox_nick}" была отклонена. Причина: ${reason}`
+                : `Ваша верификация Roblox для ника "${verification.roblox_nick}" была отклонена.`,
+            link: '#profile',
+            is_read: false,
+            created_at: now
+        });
+        
+        DB.insert('activity_log', {
+            user_id: currentUserId,
+            action: 'reject_verification',
+            details: `Отклонена верификация Roblox для пользователя ${verification.user_id} (${verification.roblox_nick}): ${reason || 'Без указания причины'}`
+        });
+        
+        return { success: true };
+    },
+    
     // Helper methods
     getUserId() {
         if (!this.token) return null;
@@ -1249,6 +1438,9 @@ const api = {
             reputation: user.reputation || 0,
             is_email_verified: user.is_email_verified || false,
             is_roblox_verified: user.is_roblox_verified || false,
+            is_muted: user.is_muted || false,
+            mute_reason: user.mute_reason || null,
+            mute_expires_at: user.mute_expires_at || user.mute_until || null,
             created_at: user.created_at
         };
     },
@@ -1583,6 +1775,18 @@ function renderRoleBadge(role, roleInfo) {
     return `<span class="profile-role-badge role-${role}"><i class="fas ${roleInfo.icon}"></i> ${roleInfo.name}</span>`;
 }
 
+// ===== HELPER: GET CATEGORY ICON =====
+function getCategoryIcon(category) {
+    const categoryIcons = {
+        'complaints': '<i class="fas fa-exclamation-triangle"></i>',
+        'appeals': '<i class="fas fa-balance-scale"></i>',
+        'questions': '<i class="fas fa-question-circle"></i>',
+        'suggestions': '<i class="fas fa-lightbulb"></i>',
+        'all': '<i class="fas fa-comments"></i>'
+    };
+    return categoryIcons[category] || '<i class="fas fa-comments"></i>';
+}
+
 // ===== AUTHENTICATION =====
 function openAuthModal(form = 'login') {
     document.getElementById('authModal').classList.add('active');
@@ -1633,6 +1837,9 @@ async function handleLogin(e) {
         api.setToken(response.token);
         currentUser = response.user;
         localStorage.setItem('urp_user', JSON.stringify(currentUser));
+        
+        // Добавляем профиль в список сохраненных
+        addCurrentProfile();
         
         closeAuthModal();
         updateAuthUI();
@@ -1705,9 +1912,9 @@ async function continueRegistration(email) {
     
     try {
         const response = await api.post('/api/auth/register', {
-            username,
-            email,
-            password,
+        username,
+        email,
+        password,
             robloxNick,
             rod
         });
@@ -1857,6 +2064,322 @@ function updateAuthUI() {
     updateOnlineUsers();
 }
 
+// ===== PROFILE MANAGER =====
+let savedProfiles = [];
+
+function loadSavedProfiles() {
+    try {
+        const saved = localStorage.getItem('saved_profiles');
+        if (saved) {
+            savedProfiles = JSON.parse(saved);
+        }
+    } catch (error) {
+        console.error('Error loading profiles:', error);
+        savedProfiles = [];
+    }
+}
+
+function saveProfiles() {
+    try {
+        localStorage.setItem('saved_profiles', JSON.stringify(savedProfiles));
+    } catch (error) {
+        console.error('Error saving profiles:', error);
+    }
+}
+
+function addCurrentProfile() {
+    if (!currentUser) return;
+    
+    const profileExists = savedProfiles.find(p => p.id === currentUser.id);
+    if (!profileExists) {
+        savedProfiles.push({
+            id: currentUser.id,
+            username: currentUser.username,
+            avatar: currentUser.avatar,
+            avatar_url: currentUser.avatar_url,
+            token: api.token,
+            added_at: new Date().toISOString()
+        });
+        saveProfiles();
+    }
+}
+
+// ===== ACCOUNT SWITCHER =====
+function openAccountSwitcher() {
+    closeUserMenu();
+    loadSavedProfiles();
+    
+    // Добавляем текущий профиль, если его нет
+    if (currentUser) {
+        addCurrentProfile();
+    }
+    
+    document.getElementById('accountSwitcherModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    renderAccountSwitcher();
+}
+
+function closeAccountSwitcher() {
+    document.getElementById('accountSwitcherModal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function renderAccountSwitcher() {
+    // Отображаем текущий аккаунт
+    const currentCard = document.getElementById('currentAccountCard');
+    if (currentCard) {
+        if (currentUser) {
+            const avatarDisplay = currentUser.avatar_url 
+                ? `<img src="${currentUser.avatar_url}" alt="">`
+                : currentUser.avatar || '🎮';
+            
+            currentCard.innerHTML = `
+                <div class="account-card active">
+                    <div class="account-avatar">${avatarDisplay}</div>
+                    <div class="account-info">
+                        <div class="account-name">${escapeHtml(currentUser.username)}</div>
+                        <div class="account-details">
+                            ${currentUser.roblox_nick ? `<span><i class="fas fa-gamepad"></i> ${escapeHtml(currentUser.roblox_nick)}</span>` : ''}
+                            ${currentUser.rod ? `<span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(currentUser.rod)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="account-badge-current">
+                        <i class="fas fa-check-circle"></i> Активен
+                    </div>
+                </div>
+            `;
+        } else {
+            currentCard.innerHTML = `
+                <div class="account-card empty">
+                    <i class="fas fa-user-slash"></i>
+                    <span>Вы не вошли в аккаунт</span>
+                </div>
+            `;
+        }
+    }
+    
+    // Отображаем сохраненные аккаунты
+    const accountsList = document.getElementById('accountsList');
+    const accountsCount = document.getElementById('accountsCount');
+    
+    if (!accountsList) return;
+    
+    // Фильтруем текущий аккаунт из списка
+    const otherAccounts = savedProfiles.filter(p => !currentUser || p.id !== currentUser.id);
+    
+    if (accountsCount) {
+        accountsCount.textContent = otherAccounts.length;
+    }
+    
+    if (otherAccounts.length === 0) {
+        accountsList.innerHTML = `
+            <div class="empty-accounts">
+                <i class="fas fa-user-friends" style="font-size: 48px; opacity: 0.3; margin-bottom: 16px;"></i>
+                <p>Нет других сохраненных аккаунтов</p>
+                <p style="color: var(--text-muted); font-size: 14px;">Войдите в другой аккаунт, чтобы добавить его</p>
+            </div>
+        `;
+        return;
+    }
+    
+    accountsList.innerHTML = otherAccounts.map((profile, index) => {
+        const avatarDisplay = profile.avatar_url 
+            ? `<img src="${profile.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`
+            : profile.avatar || '🎮';
+        
+        const addedDate = profile.added_at ? new Date(profile.added_at).toLocaleDateString('ru-RU') : '';
+        
+        return `
+            <div class="account-card" data-account-id="${profile.id}">
+                <div class="account-avatar">${avatarDisplay}</div>
+                <div class="account-info">
+                    <div class="account-name">${escapeHtml(profile.username)}</div>
+                    ${addedDate ? `<div class="account-date"><i class="fas fa-calendar"></i> Добавлен ${addedDate}</div>` : ''}
+                </div>
+                <div class="account-actions">
+                    <button class="btn btn-sm btn-primary" onclick="switchToAccount('${profile.id}')" title="Переключиться на этот аккаунт">
+                        <i class="fas fa-sign-in-alt"></i> Войти
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="removeAccount('${profile.id}')" title="Удалить из списка">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function switchToAccount(accountId) {
+    const profile = savedProfiles.find(p => p.id === accountId);
+    if (!profile) {
+        showToast('error', 'Ошибка', 'Аккаунт не найден');
+        return;
+    }
+    
+    try {
+        // Устанавливаем токен
+        api.setToken(profile.token);
+        
+        // Загружаем данные пользователя
+        const userData = await api.get('/auth/me');
+        currentUser = userData;
+        localStorage.setItem('urp_user', JSON.stringify(currentUser));
+        
+        // Обновляем UI
+        updateAuthUI();
+        closeAccountSwitcher();
+        
+        showToast('success', 'Аккаунт изменен', `Вы вошли как ${userData.username}`);
+        
+        // Обновляем список аккаунтов
+        renderAccountSwitcher();
+        
+        // Перезагружаем страницу для обновления данных
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
+    } catch (error) {
+        showToast('error', 'Ошибка', 'Не удалось переключиться на аккаунт. Возможно, сессия истекла.');
+        // Удаляем нерабочий аккаунт
+        removeAccount(accountId);
+    }
+}
+
+function removeAccount(accountId) {
+    savedProfiles = savedProfiles.filter(p => p.id !== accountId);
+    saveProfiles();
+    renderAccountSwitcher();
+    showToast('success', 'Аккаунт удален', 'Аккаунт удален из списка');
+}
+
+// Старые функции для совместимости
+function openProfileManager() {
+    openAccountSwitcher();
+}
+
+function closeProfileManager() {
+    closeAccountSwitcher();
+}
+
+function renderProfilesList() {
+    const listEl = document.getElementById('profilesList');
+    if (!listEl) return;
+    
+    if (savedProfiles.length === 0) {
+        listEl.innerHTML = `
+            <div class="empty-profiles">
+                <i class="fas fa-user-slash" style="font-size: 64px; opacity: 0.2; margin-bottom: 20px;"></i>
+                <h3 style="margin-bottom: 12px; color: var(--text-primary);">Нет сохраненных профилей</h3>
+                <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">
+                    Войдите в аккаунт, и он автоматически добавится в список
+                </p>
+                ${!currentUser ? `
+                    <button class="btn btn-primary" onclick="closeProfileManager(); openAuthModal('login');">
+                        <i class="fas fa-sign-in-alt"></i> Войти в аккаунт
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        return;
+    }
+    
+    listEl.innerHTML = savedProfiles.map((profile, index) => {
+        const isCurrent = currentUser && currentUser.id === profile.id;
+        const avatarDisplay = profile.avatar_url 
+            ? `<img src="${profile.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`
+            : profile.avatar || '🎮';
+        
+        const addedDate = profile.added_at ? new Date(profile.added_at).toLocaleDateString('ru-RU') : '';
+        
+        return `
+            <div class="profile-item ${isCurrent ? 'active' : ''}" data-profile-id="${profile.id}">
+                <div class="profile-item-number">${index + 1}</div>
+                <div class="profile-item-avatar">
+                    ${avatarDisplay}
+                </div>
+                <div class="profile-item-info">
+                    <div class="profile-item-name">${escapeHtml(profile.username)}</div>
+                    <div class="profile-item-meta">
+                        ${isCurrent ? '<span class="profile-item-badge">Текущий</span>' : ''}
+                        ${addedDate ? `<span class="profile-item-date"><i class="fas fa-calendar"></i> ${addedDate}</span>` : ''}
+                    </div>
+                </div>
+                <div class="profile-item-actions">
+                    ${!isCurrent ? `
+                        <button class="btn btn-sm btn-primary" onclick="switchToProfile('${profile.id}')" title="Переключиться на этот профиль">
+                            <i class="fas fa-sign-in-alt"></i> Переключиться
+                        </button>
+                    ` : `
+                        <span class="current-profile-indicator">
+                            <i class="fas fa-check-circle"></i> Активен
+                        </span>
+                    `}
+                    <button class="btn btn-sm btn-danger" onclick="removeProfile('${profile.id}')" title="Удалить из списка" ${isCurrent ? 'disabled' : ''}>
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function switchToProfile(profileId) {
+    const profile = savedProfiles.find(p => p.id === profileId);
+    if (!profile) {
+        showToast('error', 'Ошибка', 'Профиль не найден');
+        return;
+    }
+    
+    try {
+        // Устанавливаем токен
+        api.setToken(profile.token);
+        
+        // Загружаем данные пользователя
+        const userData = await api.get('/auth/me');
+        currentUser = userData;
+        localStorage.setItem('urp_user', JSON.stringify(currentUser));
+        
+        // Обновляем UI
+        updateAuthUI();
+        closeProfileManager();
+        
+        showToast('success', 'Профиль изменен', `Вы вошли как ${userData.username}`);
+        
+        // Обновляем список профилей
+        renderProfilesList();
+    } catch (error) {
+        showToast('error', 'Ошибка', 'Не удалось переключиться на профиль. Возможно, сессия истекла.');
+        // Удаляем нерабочий профиль
+        removeProfile(profileId);
+    }
+}
+
+function removeProfile(profileId) {
+    if (currentUser && currentUser.id === profileId) {
+        showToast('warning', 'Внимание', 'Нельзя удалить текущий профиль');
+        return;
+    }
+    
+    savedProfiles = savedProfiles.filter(p => p.id !== profileId);
+    saveProfiles();
+    renderProfilesList();
+    showToast('success', 'Профиль удален', 'Профиль успешно удален из списка');
+}
+
+function addNewProfile() {
+    if (!currentUser) {
+        showToast('info', 'Вход', 'Сначала войдите в аккаунт');
+        closeProfileManager();
+        openAuthModal('login');
+        return;
+    }
+    
+    addCurrentProfile();
+    renderProfilesList();
+    showToast('success', 'Профиль добавлен', 'Текущий профиль добавлен в список');
+}
+
+
 // ===== USER MENU =====
 function toggleUserMenu() {
     document.getElementById('userDropdown').classList.toggle('active');
@@ -1963,13 +2486,12 @@ async function verifyRobloxByUserId() {
     }
     
     try {
-        showToast('info', 'Проверка...', 'Верификация аккаунта Roblox');
+        showToast('info', 'Проверка...', 'Отправка заявки на верификацию Roblox');
         await api.post('/auth/verify-roblox-userid', { robloxUserId });
         
         closeRobloxVerifyModal();
-        currentUser.is_roblox_verified = 1;
-        localStorage.setItem('urp_user', JSON.stringify(currentUser));
-        showToast('success', '🎉 Верификация пройдена!', 'Ваш Roblox аккаунт подтверждён');
+        // Не устанавливаем is_roblox_verified в true, так как верификация ожидает рассмотрения
+        showToast('success', '✅ Заявка отправлена!', 'Ваша заявка на верификацию отправлена администраторам. Вы получите уведомление после рассмотрения.');
         
         if (!document.getElementById('profileSection').classList.contains('hidden')) {
             openProfile();
@@ -2035,6 +2557,9 @@ function switchAdminTab(tab) {
             break;
         case 'applications':
             loadAdminApplications();
+            break;
+        case 'verifications':
+            loadAdminVerifications();
             break;
         case 'posts':
             loadAdminPosts();
@@ -2118,8 +2643,8 @@ async function loadAdminStats() {
             <div style="grid-column: 1 / -1; margin-top: 16px;">
                 <h4 style="margin-bottom: 12px; color: var(--primary-400);">📁 По статусам постов</h4>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <span class="status-badge status-open">Открыто: ${stats.statusStats.open}</span>
-                    <span class="status-badge status-approved">Принято: ${stats.statusStats.approved}</span>
+                    <span class="status-badge status-open-alt">Открыто: ${stats.statusStats.open}</span>
+                    <span class="status-badge status-approved">Принято: ${stats.statusStats.accepted || stats.statusStats.approved}</span>
                     <span class="status-badge status-rejected">Отклонено: ${stats.statusStats.rejected}</span>
                     <span class="status-badge status-resolved">Решено: ${stats.statusStats.resolved}</span>
                 </div>
@@ -2183,6 +2708,15 @@ async function loadAdminUsers() {
                         ` : `
                             <button class="btn btn-danger btn-sm" data-action="ban" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}" title="Забанить">
                                 <i class="fas fa-ban"></i>
+                            </button>
+                        `}
+                        ${user.is_muted ? `
+                            <button class="btn btn-success btn-sm" data-action="unmute" data-user-id="${user.id}" title="Снять мут">
+                                <i class="fas fa-volume-up"></i>
+                            </button>
+                        ` : `
+                            <button class="btn btn-warning btn-sm" data-action="mute" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}" title="Замутить">
+                                <i class="fas fa-volume-mute"></i>
                             </button>
                         `}
                     </div>
@@ -2518,6 +3052,60 @@ async function unbanUser(userId) {
     }
 }
 
+let muteTargetUserId = null;
+let muteTargetUsername = null;
+
+function muteUser(userId, username) {
+    muteTargetUserId = userId;
+    muteTargetUsername = username;
+    document.getElementById('muteUserName').textContent = username;
+    document.getElementById('muteReasonInput').value = '';
+    document.getElementById('muteDurationInput').value = '';
+    document.getElementById('muteReasonModal').classList.remove('hidden');
+}
+
+function closeMuteModal() {
+    document.getElementById('muteReasonModal').classList.add('hidden');
+    document.getElementById('muteReasonInput').value = '';
+    document.getElementById('muteDurationInput').value = '';
+    muteTargetUserId = null;
+    muteTargetUsername = null;
+}
+
+async function confirmMute() {
+    if (!muteTargetUserId) return;
+    
+    const reason = document.getElementById('muteReasonInput').value.trim() || 'Нарушение правил';
+    const durationInput = document.getElementById('muteDurationInput').value.trim();
+    const duration = durationInput ? parseInt(durationInput) : null;
+    
+    if (duration !== null && (isNaN(duration) || duration < 1)) {
+        showToast('error', 'Ошибка', 'Длительность должна быть положительным числом');
+        return;
+    }
+    
+    try {
+        await api.post(`/admin/users/${muteTargetUserId}/mute`, { reason, duration });
+        showToast('success', 'Замучен', `Пользователь ${muteTargetUsername} замучен${duration ? ` на ${duration} минут` : ''}`);
+        closeMuteModal();
+        loadAdminUsers();
+    } catch (error) {
+        showToast('error', 'Ошибка', error.message);
+    }
+}
+
+async function unmuteUser(userId) {
+    if (!confirm('Снять мут с этого пользователя?')) return;
+    
+    try {
+        await api.post(`/admin/users/${userId}/unmute`);
+        showToast('success', 'Мут снят', 'Мут успешно снят');
+        loadAdminUsers();
+    } catch (error) {
+        showToast('error', 'Ошибка', error.message);
+    }
+}
+
 async function deleteUserAdmin(userId, username) {
     showConfirm('Удаление пользователя', `Вы уверены, что хотите УДАЛИТЬ пользователя ${username}?\n\nЭто действие нельзя отменить!`, () => {
         showConfirm('Повторное подтверждение', `Удалить ${username} и все его данные?`, async () => {
@@ -2584,11 +3172,15 @@ async function loadStaffList() {
         const users = data.users;
         
         const management = users.filter(u => u.role === 'management');
+        const managers = users.filter(u => u.role === 'manager');
+        const seniorAdmins = users.filter(u => u.role === 'senior_admin');
         const admins = users.filter(u => u.role === 'admin');
         const moderators = users.filter(u => u.role === 'moderator');
         const helpers = users.filter(u => u.role === 'helper');
         
         renderStaffList('staffManagement', management, 'management');
+        renderStaffList('staffManagers', managers, 'manager');
+        renderStaffList('staffSeniorAdmins', seniorAdmins, 'senior_admin');
         renderStaffList('staffAdmins', admins, 'admin');
         renderStaffList('staffModerators', moderators, 'moderator');
         renderStaffList('staffHelpers', helpers, 'helper');
@@ -2617,6 +3209,12 @@ function populateStaffRoleSelect() {
     }
     if (currentLevel > 3) {
         select.innerHTML += '<option value="admin">👑 Администратор</option>';
+    }
+    if (currentLevel > 3.5) {
+        select.innerHTML += '<option value="senior_admin">👑 Старший администратор</option>';
+    }
+    if (currentLevel > 4) {
+        select.innerHTML += '<option value="manager">💼 Менеджер проекта</option>';
     }
     if (currentLevel > 4) { // Only super-admin could add management
         select.innerHTML += '<option value="management">⭐ Руководство</option>';
@@ -2879,28 +3477,157 @@ let rejectTargetAppId = null;
 
 function rejectApplication(appId) {
     rejectTargetAppId = appId;
+    rejectTargetVerId = null; // Сбрасываем верификацию
     document.getElementById('rejectReasonInput').value = '';
-    document.getElementById('rejectReasonModal').classList.remove('hidden');
+    const modal = document.getElementById('rejectReasonModal');
+    const title = modal.querySelector('h3');
+    if (title) title.innerHTML = '<i class="fas fa-times-circle"></i> Отклонить заявку';
+    modal.classList.remove('hidden');
 }
 
 function closeRejectModal() {
     document.getElementById('rejectReasonModal').classList.add('hidden');
     rejectTargetAppId = null;
+    rejectTargetVerId = null;
 }
 
 async function confirmReject() {
-    if (!rejectTargetAppId) return;
-    
     const reason = document.getElementById('rejectReasonInput').value.trim();
     
+    // Проверяем, какой тип отклонения (заявка или верификация)
+    if (rejectTargetAppId) {
+        try {
+            await api.post(`/admin/applications/${rejectTargetAppId}/reject`, { reason });
+            showToast('info', 'Отклонено', 'Заявка отклонена');
+            closeRejectModal();
+            loadAdminApplications();
+        } catch (error) {
+            showToast('error', 'Ошибка', error.message);
+        }
+    } else if (rejectTargetVerId) {
+        try {
+            await api.post(`/admin/verifications/${rejectTargetVerId}/reject`, { reason });
+            showToast('info', 'Отклонено', 'Верификация отклонена');
+            closeRejectModal();
+            loadAdminVerifications();
+        } catch (error) {
+            showToast('error', 'Ошибка', error.message);
+        }
+    }
+}
+
+// ===== ADMIN VERIFICATIONS =====
+
+async function loadAdminVerifications() {
+    const status = document.getElementById('adminVerStatus')?.value || 'pending';
+    
     try {
-        await api.post(`/admin/applications/${rejectTargetAppId}/reject`, { reason });
-        showToast('info', 'Отклонено', 'Заявка отклонена');
-        closeRejectModal();
-        loadAdminApplications();
+        const verifications = await api.get(`/admin/verifications?status=${status}`);
+        
+        // Update badge count
+        const countData = await api.get('/admin/verifications/count');
+        const countBadge = document.getElementById('verificationsCount');
+        if (countBadge) {
+            if (countData.count > 0) {
+                countBadge.textContent = countData.count;
+                countBadge.classList.remove('hidden');
+            } else {
+                countBadge.classList.add('hidden');
+            }
+        }
+        
+        const container = document.getElementById('adminVerificationsList');
+        
+        if (verifications.length === 0) {
+            container.innerHTML = `
+                <div class="admin-empty">
+                    <i class="fas fa-check-circle"></i>
+                    <p>${status === 'pending' ? 'Нет новых верификаций' : 'Верификации не найдены'}</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = verifications.map(ver => {
+            const user = ver.user;
+            return `
+            <div class="application-card ${ver.status}">
+                <div class="application-header">
+                    <div class="application-user">
+                        <div class="avatar">
+                            ${user && user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : (user && user.avatar) || '🎮'}
+                        </div>
+                        <div class="info">
+                            <div class="name">${escapeHtml(ver.username || 'Unknown')}</div>
+                            <div class="meta">${getRobloxIcon(14)} Roblox: ${escapeHtml(ver.roblox_nick || '')} • User ID: ${escapeHtml(ver.roblox_user_id || '')}</div>
+                        </div>
+                    </div>
+                    <div class="application-status">
+                        ${ver.status === 'pending' ? '<span class="status-badge status-open">Ожидает</span>' : 
+                          ver.status === 'approved' ? '<span class="status-badge status-approved">Одобрена</span>' : 
+                          '<span class="status-badge status-rejected">Отклонена</span>'}
+                    </div>
+                </div>
+                
+                <div class="application-details">
+                    <div class="detail-row">
+                        <span class="label"><i class="fas fa-user"></i> Ник Roblox:</span>
+                        <span class="value">${escapeHtml(ver.roblox_nick || '')}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label"><i class="fas fa-id-card"></i> User ID:</span>
+                        <span class="value">${escapeHtml(ver.roblox_user_id || '')}</span>
+                    </div>
+                    ${ver.reject_reason ? `
+                        <div class="detail-row full">
+                            <span class="label"><i class="fas fa-comment"></i> Причина отклонения:</span>
+                            <span class="value">${escapeHtml(ver.reject_reason)}</span>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div class="application-footer">
+                    <span class="date"><i class="fas fa-calendar"></i> ${new Date(ver.created_at).toLocaleString('ru-RU')}</span>
+                    ${ver.status === 'pending' && canManageApplications() ? `
+                        <div class="actions">
+                            <button class="btn btn-success btn-sm" onclick="approveVerification('${ver.id}')">
+                                <i class="fas fa-check"></i> Принять
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="rejectVerification('${ver.id}')">
+                                <i class="fas fa-times"></i> Отклонить
+                            </button>
+                        </div>
+                    ` : ver.status === 'pending' ? '<span class="text-muted">Только модератор+ может рассматривать</span>' : ''}
+                </div>
+            </div>
+        `}).join('');
     } catch (error) {
         showToast('error', 'Ошибка', error.message);
     }
+}
+
+async function approveVerification(verId) {
+    showConfirm('Одобрение верификации', `Одобрить верификацию Roblox?`, async () => {
+        try {
+            await api.post(`/admin/verifications/${verId}/approve`);
+            showToast('success', 'Одобрено', 'Верификация одобрена');
+            loadAdminVerifications();
+        } catch (error) {
+            showToast('error', 'Ошибка', error.message);
+        }
+    });
+}
+
+let rejectTargetVerId = null;
+
+function rejectVerification(verId) {
+    rejectTargetVerId = verId;
+    rejectTargetAppId = null; // Сбрасываем заявку
+    document.getElementById('rejectReasonInput').value = '';
+    const modal = document.getElementById('rejectReasonModal');
+    const title = modal.querySelector('h3');
+    if (title) title.innerHTML = '<i class="fas fa-times-circle"></i> Отклонить верификацию';
+    modal.classList.remove('hidden');
 }
 
 async function demoteStaff(userId, username, currentRole) {
@@ -3095,7 +3822,6 @@ function openSettings() {
     document.getElementById('settingsUsername').value = currentUser.username || '';
     document.getElementById('settingsRoblox').value = currentUser.roblox_nick || '';
     document.getElementById('settingsDiscord').value = currentUser.discord || '';
-    document.getElementById('settingsRod').value = currentUser.rod || '';
     document.getElementById('settingsEmail').value = currentUser.email || '';
     
     // Render avatar upload area
@@ -3125,6 +3851,64 @@ function closeSettingsModal() {
     document.body.style.overflow = '';
 }
 
+// ===== DELETE ACCOUNT =====
+function openDeleteAccountModal() {
+    closeSettingsModal();
+    document.getElementById('deleteAccountModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('deleteAccountPassword').value = '';
+    document.getElementById('deleteAccountConfirm').checked = false;
+}
+
+function closeDeleteAccountModal() {
+    document.getElementById('deleteAccountModal').classList.remove('active');
+    document.body.style.overflow = '';
+    document.getElementById('deleteAccountPassword').value = '';
+    document.getElementById('deleteAccountConfirm').checked = false;
+}
+
+async function confirmDeleteAccount() {
+    if (!currentUser) return;
+    
+    const password = document.getElementById('deleteAccountPassword').value;
+    const confirmed = document.getElementById('deleteAccountConfirm').checked;
+    
+    if (!password) {
+        showToast('error', 'Ошибка', 'Введите пароль для подтверждения');
+            return;
+        }
+    
+    if (!confirmed) {
+        showToast('error', 'Ошибка', 'Подтвердите удаление аккаунта');
+            return;
+        }
+    
+    try {
+        await api.post(`/users/${currentUser.id}/delete-account`, { password });
+        
+        // Удаляем профиль из сохраненных
+        savedProfiles = savedProfiles.filter(p => p.id !== currentUser.id);
+        saveProfiles();
+        
+        // Разлогиниваем
+        api.setToken(null);
+        currentUser = null;
+        localStorage.removeItem('urp_user');
+        localStorage.removeItem('urp_token');
+        
+        closeDeleteAccountModal();
+        updateAuthUI();
+        showToast('success', 'Аккаунт удален', 'Ваш аккаунт был успешно удален');
+        
+        // Перезагружаем страницу через 2 секунды
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+    } catch (error) {
+        showToast('error', 'Ошибка', error.message);
+    }
+}
+
 let selectedAvatar = null;
 function selectAvatar(avatar, btn) {
     document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
@@ -3141,8 +3925,8 @@ async function uploadAvatar(input) {
     const file = input.files[0];
     if (file.size > 5 * 1024 * 1024) {
         showToast('error', 'Ошибка', 'Файл слишком большой (макс. 5MB)');
-        return;
-    }
+            return;
+        }
     
     try {
         const response = await api.uploadFile('/users/avatar/upload', file, 'avatar');
@@ -3169,13 +3953,12 @@ async function saveSettings(e) {
     const username = document.getElementById('settingsUsername').value.trim();
     const robloxNick = document.getElementById('settingsRoblox').value.trim();
     const discord = document.getElementById('settingsDiscord').value.trim();
-    const rod = document.getElementById('settingsRod').value.trim();
     const email = document.getElementById('settingsEmail').value.trim();
     const currentPassword = document.getElementById('settingsCurrentPassword').value;
     const newPassword = document.getElementById('settingsNewPassword').value;
     
     try {
-        const updates = { username, robloxNick, discord, rod, email };
+        const updates = { username, robloxNick, discord, email };
         if (selectedAvatar) updates.avatar = selectedAvatar;
         if (newPassword) {
             updates.currentPassword = currentPassword;
@@ -3376,7 +4159,7 @@ async function renderPosts() {
                      onclick="viewPost('${post.id}')">
                 <div class="post-content">
                         <div class="post-avatar">
-                            ${post.avatar_url ? `<img src="${post.avatar_url}" alt="">` : post.avatar}
+                            ${getCategoryIcon(post.category)}
                         </div>
                     <div class="post-main">
                         <div class="post-badges">
@@ -3549,9 +4332,9 @@ async function deletePost(postId) {
     showConfirm('Удаление темы', 'Вы уверены, что хотите удалить эту тему? Это действие нельзя отменить.', async () => {
         try {
             await api.delete(`/posts/${postId}`);
-    goBackToForum();
-    updateStats();
-    showToast('success', 'Удалено', 'Тема успешно удалена');
+            updateStats();
+            showToast('success', 'Удалено', 'Тема успешно удалена');
+            goBackToForum();
         } catch (error) {
             showToast('error', 'Ошибка', error.message);
         }
@@ -4816,8 +5599,8 @@ function loadTemplates() {
             <div class="template-header">
                 <h4>${escapeHtml(template.name)}</h4>
                 <div class="template-actions">
-                    <button class="btn btn-glass btn-sm" onclick="useTemplate(${index})" title="Использовать">
-                        <i class="fas fa-paper-plane"></i>
+                    <button class="btn btn-primary btn-sm" onclick="sendTemplate(${index})" title="Отправить шаблон">
+                        ${escapeHtml(template.name)}
                     </button>
                     <button class="btn btn-glass btn-sm" onclick="editTemplate(${index})" title="Редактировать">
                         <i class="fas fa-edit"></i>
@@ -4918,6 +5701,36 @@ function useTemplate(index) {
     }).catch(() => {
         showToast('info', 'Шаблон', template.content);
     });
+}
+
+async function sendTemplate(index) {
+    const templates = JSON.parse(localStorage.getItem('admin_templates') || '[]');
+    const template = templates[index];
+    if (!template) return;
+    
+    // Try to find active comment form or post reply form
+    const commentInput = document.querySelector('.comment-input, #commentContent, textarea[placeholder*="комментарий"], textarea[placeholder*="ответ"]');
+    
+    if (commentInput) {
+        commentInput.value = template.content;
+        commentInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // Try to find submit button and click it
+        const submitButton = commentInput.closest('form')?.querySelector('button[type="submit"], .btn-primary');
+        if (submitButton && !submitButton.disabled) {
+            submitButton.click();
+            showToast('success', 'Отправлено', `Шаблон "${template.name}" отправлен`);
+        } else {
+            showToast('info', 'Шаблон вставлен', `Шаблон "${template.name}" вставлен в поле. Отправьте вручную.`);
+        }
+    } else {
+        // If no form found, copy to clipboard
+        navigator.clipboard.writeText(template.content).then(() => {
+            showToast('success', 'Скопировано', `Шаблон "${template.name}" скопирован в буфер обмена`);
+        }).catch(() => {
+            showToast('info', 'Шаблон', template.content);
+        });
+    }
 }
 
 // ===== EXPORT/IMPORT =====
@@ -5504,6 +6317,22 @@ window.closeSettingsModal = closeSettingsModal;
 window.selectAvatar = selectAvatar;
 window.uploadAvatar = uploadAvatar;
 window.saveSettings = saveSettings;
+window.openDeleteAccountModal = openDeleteAccountModal;
+window.closeDeleteAccountModal = closeDeleteAccountModal;
+window.confirmDeleteAccount = confirmDeleteAccount;
+window.openAccountSwitcher = openAccountSwitcher;
+window.closeAccountSwitcher = closeAccountSwitcher;
+window.switchToAccount = switchToAccount;
+window.removeAccount = removeAccount;
+window.openAccountSwitcher = openAccountSwitcher;
+window.closeAccountSwitcher = closeAccountSwitcher;
+window.switchToAccount = switchToAccount;
+window.removeAccount = removeAccount;
+window.openProfileManager = openProfileManager; // Для совместимости
+window.closeProfileManager = closeProfileManager; // Для совместимости
+window.switchToProfile = switchToProfile; // Для совместимости
+window.removeProfile = removeProfile; // Для совместимости
+window.addNewProfile = addNewProfile;
 window.handleCreatePost = handleCreatePost;
 window.closeCreateModal = closeCreateModal;
 window.goToStep1 = goToStep1;
@@ -5562,8 +6391,15 @@ window.demoteStaff = demoteStaff;
 window.loadAdminApplications = loadAdminApplications;
 window.approveApplication = approveApplication;
 window.rejectApplication = rejectApplication;
+window.loadAdminVerifications = loadAdminVerifications;
+window.approveVerification = approveVerification;
+window.rejectVerification = rejectVerification;
 window.closeBanModal = closeBanModal;
 window.confirmBan = confirmBan;
+window.muteUser = muteUser;
+window.closeMuteModal = closeMuteModal;
+window.confirmMute = confirmMute;
+window.unmuteUser = unmuteUser;
 window.closeRejectModal = closeRejectModal;
 window.confirmReject = confirmReject;
 window.rejectPost = rejectPost;
@@ -5589,6 +6425,7 @@ window.saveTemplate = saveTemplate;
 window.editTemplate = editTemplate;
 window.deleteTemplate = deleteTemplate;
 window.useTemplate = useTemplate;
+window.sendTemplate = sendTemplate;
 window.exportData = exportData;
 window.handleImportFile = handleImportFile;
 window.createBackup = createBackup;
