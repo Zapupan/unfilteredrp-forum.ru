@@ -1,4 +1,34 @@
 
+// ===== COOKIES HELPER =====
+const Cookies = {
+    set(name, value, days = 30) {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+    },
+    
+    get(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) {
+                return decodeURIComponent(c.substring(nameEQ.length, c.length));
+            }
+        }
+        return null;
+    },
+    
+    remove(name) {
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+    },
+    
+    exists(name) {
+        return this.get(name) !== null;
+    }
+};
+
 // ===== DATABASE (LocalStorage) =====
 const DB = {
     // Simple password hash (for client-side only, not secure for production)
@@ -133,7 +163,9 @@ const ROLES_INFO = {
     'helper': { level: 1, name: 'Хелпер', icon: 'fa-hands-helping', color: '#22c55e' },
     'moderator': { level: 2, name: 'Модератор', icon: 'fa-shield-alt', color: '#a855f7' },
     'admin': { level: 3, name: 'Администратор', icon: 'fa-crown', color: '#f59e0b' },
-    'management': { level: 4, name: 'Руководство', icon: 'fa-star', color: '#ef4444' }
+    'senior_admin': { level: 3.5, name: 'Старший администратор', icon: 'fa-crown', color: '#f97316' },
+    'project_manager': { level: 4, name: 'Менеджер проекта', icon: 'fa-briefcase', color: '#ec4899' },
+    'management': { level: 5, name: 'Руководство', icon: 'fa-star', color: '#ef4444' }
 };
 
 // ===== API HELPER (LocalStorage version) =====
@@ -380,11 +412,20 @@ const api = {
         const token = 'token_' + user.id;
         this.setToken(token);
         
+        // Отправляем email с кодом верификации (асинхронно, не блокируем ответ)
+        sendVerificationEmail(email, emailCode, username).then(sent => {
+            if (sent) {
+                console.log('Email с кодом верификации отправлен');
+            }
+        }).catch(err => {
+            console.error('Ошибка отправки email:', err);
+        });
+        
         return {
             token,
             user: this.formatUser(user),
-            emailSent: false,
-            emailCode: emailCode // Return code for display
+            emailSent: true, // Предполагаем что отправлено (асинхронная отправка)
+            emailCode: emailCode // Return code for display (fallback если email не отправился)
         };
     },
     
@@ -410,7 +451,20 @@ const api = {
         if (!userId) throw new Error('Unauthorized');
         const user = DB.get('users', userId);
         if (!user) throw new Error('User not found');
-        return { code: user.email_code || '000000' };
+        
+        // Генерируем новый код, если его нет или истёк
+        if (!user.email_code || (user.email_code_expires && new Date(user.email_code_expires) < new Date())) {
+            const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
+            const codeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+            DB.update('users', userId, { email_code: emailCode, email_code_expires: codeExpires });
+            user.email_code = emailCode;
+            user.email_code_expires = codeExpires;
+        }
+        
+        return { 
+            email: user.email,
+            code: user.email_code 
+        };
     },
     
     handleVerifyEmail({ code }) {
@@ -428,9 +482,22 @@ const api = {
     handleResendEmailCode() {
         const userId = this.getUserId();
         if (!userId) throw new Error('Unauthorized');
+        const user = DB.get('users', userId);
+        if (!user) throw new Error('User not found');
+        
         const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
         const codeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         DB.update('users', userId, { email_code: emailCode, email_code_expires: codeExpires });
+        
+        // Отправляем email с новым кодом
+        sendVerificationEmail(user.email, emailCode, user.username).then(sent => {
+            if (sent) {
+                console.log('Email с новым кодом верификации отправлен');
+            }
+        }).catch(err => {
+            console.error('Ошибка отправки email:', err);
+        });
+        
         return { code: emailCode };
     },
     
@@ -485,7 +552,16 @@ const api = {
         if (!user) throw new Error('User not found');
         
         const changes = {};
+        if (updates.username && updates.username !== user.username) {
+            if (updates.username.length < 3 || updates.username.length > 20) {
+                throw new Error('Имя пользователя должно быть от 3 до 20 символов');
+            }
+            const existing = DB.getAll('users', u => u.username === updates.username && u.id !== userId);
+            if (existing.length > 0) throw new Error('Имя пользователя уже используется');
+            changes.username = updates.username;
+        }
         if (updates.robloxNick) changes.roblox_nick = updates.robloxNick;
+        if (updates.discord !== undefined) changes.discord = updates.discord || null;
         if (updates.email && updates.email !== user.email) {
             const existing = DB.getAll('users', u => u.email === updates.email && u.id !== userId);
             if (existing.length > 0) throw new Error('Email уже используется');
@@ -503,6 +579,7 @@ const api = {
             changes.password = DB.hashPassword(updates.newPassword);
         }
         
+        changes.updated_at = new Date().toISOString();
         DB.update('users', userId, changes);
         DB.insert('activity_log', { user_id: userId, action: 'profile_update', details: 'Обновление профиля' });
         return this.formatUser(DB.get('users', userId));
@@ -932,10 +1009,15 @@ const api = {
         return { users: users.map(u => this.formatUser(u)) };
     },
     
-    handleSearchUser(username) {
-        const user = DB.getAll('users', u => u.username === username)[0];
+    handleSearchUser(searchTerm) {
+        const searchLower = decodeURIComponent(searchTerm).toLowerCase().trim();
+        // Ищем по нику из сайта (username) или по нику из Roblox (roblox_nick)
+        const user = DB.getAll('users').find(u => 
+            u.username.toLowerCase() === searchLower || 
+            (u.roblox_nick && u.roblox_nick.toLowerCase() === searchLower)
+        );
         if (!user) throw new Error('User not found');
-        return { user: this.formatUser(user) };
+        return this.formatUser(user);
     },
     
     handleChangeUserRole(userId, { role }) {
@@ -944,16 +1026,20 @@ const api = {
         const targetUser = DB.get('users', userId);
         
         if (!currentUser || !targetUser) throw new Error('User not found');
-        if (targetUser.role === 'management' && currentUser.role !== 'management') {
+        const targetUserLevel = ROLES_INFO[targetUser.role]?.level || 0;
+        const currentUserLevel = ROLES_INFO[currentUser.role]?.level || 0;
+        
+        if (targetUserLevel >= 5 && currentUserLevel < 5) {
             throw new Error('Нельзя изменять роль руководства');
         }
-        if (userId === currentUserId && role !== 'management') {
+        if (userId === currentUserId && ROLES_INFO[role]?.level < currentUserLevel) {
             throw new Error('Нельзя понизить свою роль');
         }
         
-        const currentLevel = ROLES_INFO[currentUser.role]?.level || 0;
+        const currentLevel = currentUserLevel;
         const targetLevel = ROLES_INFO[role]?.level || 0;
-        if (targetLevel >= currentLevel) {
+        // Руководство (level 5) может назначать любые роли, включая management
+        if (targetLevel >= currentLevel && currentUserLevel < 5) {
             throw new Error('Нельзя назначить роль выше или равную вашей');
         }
         
@@ -972,7 +1058,8 @@ const api = {
         const targetUser = DB.get('users', userId);
         
         if (!currentUser || !targetUser) throw new Error('User not found');
-        if (targetUser.role === 'management') {
+        const targetUserLevel = ROLES_INFO[targetUser.role]?.level || 0;
+        if (targetUserLevel >= 5) {
             throw new Error('Нельзя забанить руководство');
         }
         if (userId === currentUserId) {
@@ -1007,7 +1094,8 @@ const api = {
         const targetUser = DB.get('users', userId);
         
         if (!currentUser || !targetUser) throw new Error('User not found');
-        if (targetUser.role === 'management') {
+        const targetUserLevel = ROLES_INFO[targetUser.role]?.level || 0;
+        if (targetUserLevel >= 5) {
             throw new Error('Нельзя удалить руководство');
         }
         if (userId === currentUserId) {
@@ -1173,6 +1261,7 @@ const api = {
             username: user.username,
             email: user.email,
             roblox_nick: user.roblox_nick,
+            discord: user.discord || null,
             avatar: user.avatar,
             avatar_url: user.avatar_url,
             role: user.role,
@@ -1265,6 +1354,77 @@ const api = {
         }
     }
 };
+
+// ===== EMAIL SERVICE CONFIGURATION =====
+// Настройте EmailJS: https://www.emailjs.com/
+// 1. Зарегистрируйтесь на emailjs.com (бесплатно)
+// 2. Создайте Email Service (Gmail, Outlook и т.д.)
+// 3. Создайте Email Template
+// 4. Получите Public Key, Service ID и Template ID
+// 5. Замените значения ниже на свои
+
+const EMAILJS_CONFIG = {
+    PUBLIC_KEY: 'QSu4MBsyUYOiq5dCj', // Замените на ваш Public Key из EmailJS
+    SERVICE_ID: 'service_unrp727D', // Замените на ваш Service ID
+    TEMPLATE_ID: 'template_m2kb6cq' // Замените на ваш Template ID
+};
+
+// Инициализация EmailJS
+if (typeof emailjs !== 'undefined') {
+    emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY);
+}
+
+// Функция отправки email с кодом верификации
+async function sendVerificationEmail(email, code, username) {
+    // Если EmailJS не настроен, возвращаем false
+    if (EMAILJS_CONFIG.PUBLIC_KEY === 'YOUR_PUBLIC_KEY' || typeof emailjs === 'undefined') {
+        console.warn('EmailJS не настроен. Письмо не отправлено.');
+        showToast('warning', 'EmailJS не настроен', 'Настройте EmailJS для отправки писем');
+        return false;
+    }
+    
+    try {
+        // Параметры для шаблона EmailJS
+        // Убедитесь, что переменные в шаблоне совпадают с этими именами
+        const templateParams = {
+            to_email: email,
+            to_name: username,
+            verification_code: code,
+            from_name: 'Unfiltered RP',
+            message: `Ваш код подтверждения: ${code}`
+        };
+        
+        console.log('Отправка email:', { email, code, username });
+        console.log('EmailJS Config:', EMAILJS_CONFIG);
+        
+        const result = await emailjs.send(
+            EMAILJS_CONFIG.SERVICE_ID,
+            EMAILJS_CONFIG.TEMPLATE_ID,
+            templateParams
+        );
+        
+        console.log('Email успешно отправлен:', result);
+        return true;
+    } catch (error) {
+        console.error('Ошибка отправки email:', error);
+        console.error('Детали ошибки:', {
+            text: error.text,
+            status: error.status,
+            message: error.message
+        });
+        
+        // Показываем пользователю понятное сообщение об ошибке
+        let errorMessage = 'Не удалось отправить письмо';
+        if (error.text) {
+            errorMessage += ': ' + error.text;
+        } else if (error.message) {
+            errorMessage += ': ' + error.message;
+        }
+        showToast('error', 'Ошибка отправки', errorMessage);
+        
+        return false;
+    }
+}
 
 // ===== STATE =====
 let currentUser = null;
@@ -1528,11 +1688,11 @@ async function handleRegister(e) {
                 document.getElementById('regEmail').value = email;
                 continueRegistration(email);
             });
-            return;
+        return;
         } else {
             showToast('error', 'Ошибка email', emailValidation.error);
-            return;
-        }
+        return;
+    }
     } else if (emailValidation.suggestion) {
         showConfirm('Исправление email', `${emailValidation.error}\n\nИспользовать исправленный адрес?`, () => {
             email = emailValidation.suggestion;
@@ -1564,9 +1724,9 @@ async function continueRegistration(email) {
     
     try {
         const response = await api.post('/api/auth/register', {
-  username,
-  email,
-  password,
+        username,
+        email,
+        password,
   robloxNick
 });
         api.setToken(response.token);
@@ -1694,10 +1854,22 @@ function updateAuthUI() {
         } else {
             adminMenuItems.classList.add('hidden');
         }
+        
+        // Show Export/Import tab only for management (level 5)
+        const exportTabBtn = document.getElementById('adminTabExportBtn');
+        if (exportTabBtn) {
+            if (roleLevel >= 5) {
+                exportTabBtn.style.display = '';
+            } else {
+                exportTabBtn.style.display = 'none';
+            }
+        }
     } else {
         guestButtons.classList.remove('hidden');
         userButtons.classList.add('hidden');
         adminMenuItems?.classList.add('hidden');
+        const exportTabBtn = document.getElementById('adminTabExportBtn');
+        if (exportTabBtn) exportTabBtn.style.display = 'none';
     }
     
     updateOnlineUsers();
@@ -1726,7 +1898,20 @@ async function openEmailVerifyModal() {
     try {
         const data = await api.get('/auth/email-code');
         document.getElementById('emailVerifyAddress').textContent = data.email;
-        document.getElementById('emailDisplayCode').textContent = data.code;
+        
+        // Проверяем, настроен ли EmailJS
+        const emailjsConfigured = EMAILJS_CONFIG.PUBLIC_KEY !== 'YOUR_PUBLIC_KEY' && typeof emailjs !== 'undefined';
+        
+        if (emailjsConfigured) {
+            // Если EmailJS настроен, скрываем код и показываем сообщение об отправке
+            document.getElementById('emailCodeDisplaySection').style.display = 'none';
+            document.getElementById('emailSentMessage').style.display = 'block';
+        } else {
+            // Если EmailJS не настроен, показываем код на экране
+            document.getElementById('emailCodeDisplaySection').style.display = 'block';
+            document.getElementById('emailSentMessage').style.display = 'none';
+            document.getElementById('emailDisplayCode').textContent = data.code;
+        }
     } catch (error) {
         showToast('error', 'Ошибка', error.message);
     }
@@ -1762,8 +1947,20 @@ async function verifyEmail() {
 async function refreshEmailCode() {
     try {
         const data = await api.post('/auth/resend-email-code');
-        document.getElementById('emailDisplayCode').textContent = data.code;
-        showToast('success', 'Готово', 'Новый код сгенерирован');
+        
+        // Проверяем, настроен ли EmailJS
+        const emailjsConfigured = EMAILJS_CONFIG.PUBLIC_KEY !== 'YOUR_PUBLIC_KEY' && typeof emailjs !== 'undefined';
+        
+        if (emailjsConfigured) {
+            // Если EmailJS настроен, код отправлен на email
+            showToast('success', 'Отправлено', 'Новый код отправлен на вашу почту');
+        } else {
+            // Если EmailJS не настроен, показываем код на экране
+            document.getElementById('emailDisplayCode').textContent = data.code;
+            document.getElementById('emailCodeDisplaySection').style.display = 'block';
+            document.getElementById('emailSentMessage').style.display = 'none';
+            showToast('success', 'Готово', 'Новый код сгенерирован');
+        }
     } catch (error) {
         showToast('error', 'Ошибка', error.message);
     }
@@ -1849,13 +2046,13 @@ function closeAdminPanel() {
 function switchAdminTab(tab) {
     adminCurrentTab = tab;
     
-    // Update tab buttons - remove all active classes first
-    document.querySelectorAll('.admin-tab').forEach(btn => {
+    // Update menu items - remove all active classes first
+    document.querySelectorAll('.admin-menu-item').forEach(btn => {
         btn.classList.remove('active');
     });
     
-    // Find and activate the correct tab button
-    document.querySelectorAll('.admin-tab').forEach(btn => {
+    // Find and activate the correct menu item
+    document.querySelectorAll('.admin-menu-item').forEach(btn => {
         const onclickStr = btn.getAttribute('onclick') || '';
         if (onclickStr.includes(`'${tab}'`) || onclickStr.includes(`"${tab}"`)) {
             btn.classList.add('active');
@@ -1986,9 +2183,10 @@ async function loadAdminUsers() {
     
     try {
         const data = await api.get(`/admin/users/list?search=${encodeURIComponent(search)}&role=${role}&limit=50`);
+        const usersList = document.getElementById('adminUsersList');
         
         if (data.users.length === 0) {
-            document.getElementById('adminUsersList').innerHTML = `
+            usersList.innerHTML = `
                 <div class="admin-empty">
                     <i class="fas fa-users"></i>
                     <p>Пользователи не найдены</p>
@@ -1997,28 +2195,29 @@ async function loadAdminUsers() {
             return;
         }
         
-        const usersList = document.getElementById('adminUsersList');
         usersList.innerHTML = data.users.map(user => {
             const isBanned = user.is_banned === 1 || user.is_banned === true;
             const isSelected = selectedUsers.has(user.id);
             return `
                 <div class="admin-user-row ${isBanned ? 'banned' : ''} ${isSelected ? 'selected' : ''}" 
                      data-user-id="${user.id}">
-                    <div class="avatar">
-                        ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.avatar || '🎮'}
-                    </div>
-                    <div class="info">
-                        <div class="name" style="color: ${user.roleInfo?.color || 'inherit'}">
-                            ${isBanned ? '🚫 ' : ''}${escapeHtml(user.username)}
+                    <div class="admin-user-row-content">
+                        <div class="avatar">
+                            ${user.avatar_url ? `<img src="${user.avatar_url}" alt="">` : user.avatar || '🎮'}
                         </div>
-                        <div class="meta">
-                            ${escapeHtml(user.roblox_nick || '')} • ${escapeHtml(user.email || '')} • Rep: ${user.reputation || 0}
+                        <div class="info">
+                            <div class="name" style="color: ${user.roleInfo?.color || 'inherit'}">
+                                ${isBanned ? '🚫 ' : ''}${escapeHtml(user.username)}
+                            </div>
+                            <div class="meta">
+                                ${escapeHtml(user.roblox_nick || '')} • ${escapeHtml(user.email || '')} • Rep: ${user.reputation || 0}
+                            </div>
                         </div>
-                    </div>
-                    <div class="badges">
-                        ${renderRoleBadge(user.role, user.roleInfo)}
-                        ${user.is_email_verified ? '<span class="verify-badge verified" title="Email ✓"><i class="fas fa-envelope"></i></span>' : ''}
-                        ${user.is_roblox_verified ? '<span class="verify-badge verified" title="Roblox ✓"><i class="fas fa-gamepad"></i></span>' : ''}
+                        <div class="badges">
+                            ${renderRoleBadge(user.role, user.roleInfo)}
+                            ${user.is_email_verified ? '<span class="verify-badge verified" title="Email ✓"><i class="fas fa-envelope"></i></span>' : ''}
+                            ${user.is_roblox_verified ? `<span class="verify-badge verified" title="Roblox ✓">${getRobloxIcon(14)}</span>` : ''}
+                        </div>
                     </div>
                     <div class="actions">
                         <button class="btn btn-glass btn-sm" data-action="edit" data-user-id="${user.id}" title="Редактировать">
@@ -2038,31 +2237,45 @@ async function loadAdminUsers() {
             `;
         }).join('');
         
-        // Add event listeners using event delegation
-        usersList.addEventListener('click', (e) => {
-            const row = e.target.closest('.admin-user-row');
-            if (!row) return;
-            
-            const userId = row.getAttribute('data-user-id');
-            const action = e.target.closest('[data-action]');
-            
-            if (action) {
-                // Button clicked
+        // Setup event delegation - remove old handler if exists
+        if (usersList._adminUsersClickHandler) {
+            usersList.removeEventListener('click', usersList._adminUsersClickHandler);
+        }
+        
+        // Create new click handler
+        usersList._adminUsersClickHandler = function(e) {
+            // Check if clicked on action button
+            const actionBtn = e.target.closest('[data-action]');
+            if (actionBtn) {
                 e.stopPropagation();
-                const actionType = action.getAttribute('data-action');
-                if (actionType === 'edit') {
+                e.preventDefault();
+                const action = actionBtn.getAttribute('data-action');
+                const userId = actionBtn.getAttribute('data-user-id');
+                
+                if (action === 'edit') {
                     openAdminUserModal(userId);
-                } else if (actionType === 'ban') {
-                    const username = action.getAttribute('data-username');
+                } else if (action === 'ban') {
+                    const username = actionBtn.getAttribute('data-username');
                     banUser(userId, username);
-                } else if (actionType === 'unban') {
+                } else if (action === 'unban') {
                     unbanUser(userId);
                 }
-            } else {
-                // Card clicked - toggle selection
-                toggleUserSelectionByClick(userId);
+                return false;
             }
-        });
+            
+            // Check if clicked on row (but not on actions area)
+            const row = e.target.closest('.admin-user-row');
+            const actionsArea = e.target.closest('.actions');
+            if (row && !actionsArea) {
+                const userId = row.getAttribute('data-user-id');
+                if (userId) {
+                    toggleUserSelectionByClick(userId);
+                }
+            }
+        };
+        
+        usersList.addEventListener('click', usersList._adminUsersClickHandler);
+        updateUsersSelectionUI();
     } catch (error) {
         showToast('error', 'Ошибка', error.message);
     }
@@ -2257,7 +2470,7 @@ async function openAdminUserModal(userId) {
                 <div class="admin-user-details">
                     <h3>${escapeHtml(user.username)}</h3>
                     <div class="admin-user-meta">
-                        <i class="fas fa-gamepad"></i> ${escapeHtml(user.roblox_nick)}<br>
+                        ${getRobloxIcon(14)} ${escapeHtml(user.roblox_nick)}<br>
                         <i class="fas fa-envelope"></i> ${escapeHtml(user.email || 'N/A')}<br>
                         <i class="fas fa-star"></i> Репутация: ${user.reputation}
                     </div>
@@ -2267,7 +2480,7 @@ async function openAdminUserModal(userId) {
             <div class="admin-user-badges" style="margin-bottom: 20px;">
                 ${renderRoleBadge(user.role, user.roleInfo)}
                 ${user.is_email_verified ? '<span class="verify-badge verified"><i class="fas fa-envelope"></i> Email ✓</span>' : '<span class="verify-badge unverified"><i class="fas fa-envelope"></i> Email ✗</span>'}
-                ${user.is_roblox_verified ? '<span class="verify-badge verified"><i class="fas fa-gamepad"></i> Roblox ✓</span>' : '<span class="verify-badge unverified"><i class="fas fa-gamepad"></i> Roblox ✗</span>'}
+                ${user.is_roblox_verified ? `<span class="verify-badge verified">${getRobloxIcon(14)} Roblox ✓</span>` : `<span class="verify-badge unverified">${getRobloxIcon(14)} Roblox ✗</span>`}
             </div>
             
             <div class="admin-roles-section">
@@ -2588,8 +2801,14 @@ function getAvailableRolesOptions() {
     if (currentLevel > 2) { // Can assign moderator (admin+)
         options += '<option value="moderator">🛡️ Модератор</option>';
     }
-    if (currentLevel > 3) { // Can assign admin (management only)
-        options += '<option value="admin">👑 Админ</option>';
+    if (currentLevel > 3) { // Can assign admin (project_manager+)
+        options += '<option value="admin">👑 Администратор</option>';
+    }
+    if (currentLevel > 4) { // Can assign project_manager (management only)
+        options += '<option value="project_manager">💼 Менеджер проекта</option>';
+    }
+    if (currentLevel >= 5) { // Can assign management (management only)
+        options += '<option value="management">⭐ Руководство</option>';
     }
     
     return options || '<option value="helper">🤝 Хелпер</option>';
@@ -2739,7 +2958,8 @@ async function demoteStaff(userId, username, currentRole) {
     }
     
     // Check if trying to demote management
-    if (currentRole === 'management') {
+    const targetUserLevel = ROLES_INFO[currentRole]?.level || 0;
+    if (targetUserLevel >= 5) {
         showToast('error', 'Ошибка', 'Нельзя снять роль с руководства проекта');
         return;
     }
@@ -2747,11 +2967,13 @@ async function demoteStaff(userId, username, currentRole) {
     showConfirm('Снятие роли', `Снять роль "${ROLES_INFO[currentRole].name}" с пользователя ${username}?\n\nОн станет обычным пользователем.`, async () => {
         try {
             await api.put(`/admin/users/${userId}/role`, { role: 'user' });
-        showToast('success', 'Роль снята', `${username} теперь обычный пользователь`);
-        loadStaffList();
-    } catch (error) {
-        showToast('error', 'Ошибка', error.message);
-    }
+            showToast('success', 'Роль снята', `${username} теперь обычный пользователь`);
+            closeAdminUserModal();
+            loadAdminUsers();
+        } catch (error) {
+            showToast('error', 'Ошибка', error.message);
+        }
+    });
 }
 
 // ===== PROFILE =====
@@ -2809,13 +3031,13 @@ async function openProfile(userId = null) {
                 }
                 
                 if (profileUser.is_roblox_verified) {
-                    badgeHTML += '<span class="verify-badge verified"><i class="fas fa-gamepad"></i> Roblox ✓</span>';
+                    badgeHTML += `<span class="verify-badge verified">${getRobloxIcon(14)} Roblox ✓</span>`;
                 } else {
-                    badgeHTML += '<span class="verify-badge unverified" onclick="openRobloxVerifyModal()"><i class="fas fa-gamepad"></i> Верифицировать Roblox</span>';
+                    badgeHTML += `<span class="verify-badge unverified" onclick="openRobloxVerifyModal()">${getRobloxIcon(14)} Верифицировать Roblox</span>`;
                 }
             } else {
                 if (profileUser.is_roblox_verified) {
-                    badgeHTML += '<span class="verify-badge verified"><i class="fas fa-gamepad"></i> Roblox ✓</span>';
+                    badgeHTML += `<span class="verify-badge verified">${getRobloxIcon(14)} Roblox ✓</span>`;
                 }
             }
             
@@ -2825,7 +3047,8 @@ async function openProfile(userId = null) {
         const profileMeta = document.querySelector('.profile-meta');
         if (profileMeta) {
             profileMeta.innerHTML = `
-                <span><i class="fas fa-gamepad"></i> <span id="profileRoblox">${profileUser.roblox_nick || ''}</span></span>
+                ${profileUser.roblox_nick ? `<span>${getRobloxIcon(14)} <span id="profileRoblox">${profileUser.roblox_nick}</span></span>` : ''}
+                ${profileUser.discord ? `<span><i class="fab fa-discord"></i> <span id="profileDiscord">${escapeHtml(profileUser.discord)}</span></span>` : ''}
                 <span><i class="fas fa-calendar"></i> <span id="profileDate">${new Date(profileUser.created_at).toLocaleDateString('ru-RU')}</span></span>
             `;
         }
@@ -2854,8 +3077,8 @@ async function openProfile(userId = null) {
                     </button>
                     <button class="btn btn-glass" onclick="giveReputation('${profileUserId}', 'like')">
                         <i class="fas fa-thumbs-up"></i>
-                    </button>
-                `;
+            </button>
+        `;
     } else {
         actionsEl.innerHTML = '';
             }
@@ -2887,10 +3110,24 @@ async function openProfile(userId = null) {
     }
 }
 
-function openMyPosts() {
+async function openMyPosts() {
     closeUserMenu();
     if (!currentUser) return;
+    
+    try {
+        // Проверяем наличие тем у пользователя
+        const userPosts = await api.get(`/users/${currentUser.id}/posts`);
+        
+        if (userPosts.length === 0) {
+            showToast('info', 'Нет тем', 'У вас пока нет созданных тем. Создайте первую тему на форуме!');
+            return;
+        }
+        
+        // Если есть темы, открываем профиль
     openProfile(currentUser.id);
+    } catch (error) {
+        showToast('error', 'Ошибка', 'Не удалось загрузить ваши темы');
+    }
 }
 
 // ===== SETTINGS =====
@@ -2901,7 +3138,9 @@ function openSettings() {
     document.getElementById('settingsModal').classList.add('active');
     document.body.style.overflow = 'hidden';
     
+    document.getElementById('settingsUsername').value = currentUser.username || '';
     document.getElementById('settingsRoblox').value = currentUser.roblox_nick || '';
+    document.getElementById('settingsDiscord').value = currentUser.discord || '';
     document.getElementById('settingsEmail').value = currentUser.email || '';
     
     // Render avatar upload area
@@ -2972,13 +3211,15 @@ async function saveSettings(e) {
     
     if (!currentUser) return;
     
+    const username = document.getElementById('settingsUsername').value.trim();
     const robloxNick = document.getElementById('settingsRoblox').value.trim();
+    const discord = document.getElementById('settingsDiscord').value.trim();
     const email = document.getElementById('settingsEmail').value.trim();
     const currentPassword = document.getElementById('settingsCurrentPassword').value;
     const newPassword = document.getElementById('settingsNewPassword').value;
     
     try {
-        const updates = { robloxNick, email };
+        const updates = { username, robloxNick, discord, email };
         if (selectedAvatar) updates.avatar = selectedAvatar;
         if (newPassword) {
             updates.currentPassword = currentPassword;
@@ -3352,12 +3593,13 @@ async function deletePost(postId) {
     showConfirm('Удаление темы', 'Вы уверены, что хотите удалить эту тему? Это действие нельзя отменить.', async () => {
         try {
             await api.delete(`/posts/${postId}`);
-            goBackToForum();
-            updateStats();
+    goBackToForum();
+    updateStats();
     showToast('success', 'Удалено', 'Тема успешно удалена');
-    } catch (error) {
-        showToast('error', 'Ошибка', error.message);
-    }
+        } catch (error) {
+            showToast('error', 'Ошибка', error.message);
+        }
+    });
 }
 
 // ===== ADMIN MODERATION =====
@@ -4033,6 +4275,22 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getRobloxIcon(size = 16) {
+    // Выбираем подходящий размер иконки (используем ближайший доступный размер)
+    let iconSize;
+    if (size <= 23) iconSize = 23;
+    else if (size <= 38) iconSize = 38;
+    else if (size <= 50) iconSize = 50;
+    else if (size <= 75) iconSize = 75;
+    else if (size <= 100) iconSize = 100;
+    else if (size <= 150) iconSize = 150;
+    else if (size <= 200) iconSize = 200;
+    else if (size <= 250) iconSize = 250;
+    else iconSize = 500;
+    
+    return `<img src="icons/icons8-roblox-${iconSize}.png" alt="Roblox" class="roblox-icon" width="${size}" height="${size}" style="display: inline-block; vertical-align: middle;">`;
+}
+
 function formatContent(content) {
     return escapeHtml(content)
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -4413,26 +4671,65 @@ async function loadAnalytics() {
             categoryStats[p.category] = (categoryStats[p.category] || 0) + 1;
         });
         
-        // Calculate max values for charts
+        // Для периодов больше 7 дней - группируем данные для красивого отображения
+        let chartData = Object.entries(dailyStats);
+        if (period > 7) {
+            // Группируем данные: для 30 дней - по неделям, для 90 - по 2 недели, для 365 - по месяцам
+            let groupSize;
+            if (period === 30) {
+                groupSize = 7; // Группируем по неделям (4-5 точек)
+            } else if (period === 90) {
+                groupSize = 14; // Группируем по 2 недели (6-7 точек)
+            } else {
+                groupSize = 30; // Группируем по месяцам (12 точек)
+            }
+            
+            const grouped = {};
+            chartData.forEach(([date, stats], index) => {
+                const groupIndex = Math.floor(index / groupSize);
+                const groupKey = `group_${groupIndex}`;
+                if (!grouped[groupKey]) {
+                    grouped[groupKey] = { users: 0, posts: 0, comments: 0, activity: 0, dates: [] };
+                }
+                grouped[groupKey].users += stats.users;
+                grouped[groupKey].posts += stats.posts;
+                grouped[groupKey].comments += stats.comments;
+                grouped[groupKey].activity += stats.activity;
+                grouped[groupKey].dates.push(date);
+            });
+            chartData = Object.entries(grouped).map(([key, stats]) => {
+                const firstDate = new Date(Math.min(...stats.dates.map(d => new Date(d).getTime())));
+                return [firstDate.toISOString().split('T')[0], stats];
+            }).sort((a, b) => new Date(a[0]) - new Date(b[0]));
+        }
+        
+        // Calculate max values for charts (используем исходные dailyStats для правильных максимумов)
         const maxUsers = Math.max(...Object.values(dailyStats).map(s => s.users), 1);
         const maxPosts = Math.max(...Object.values(dailyStats).map(s => s.posts), 1);
         const maxComments = Math.max(...Object.values(dailyStats).map(s => s.comments), 1);
         const maxActivity = Math.max(...Object.values(dailyStats).map(s => s.activity), 1);
         
+        // Определяем, нужно ли делать столбцы тонкими (для периодов > 7 дней)
+        const isCompact = period > 7;
+        const chartClass = isCompact ? 'analytics-chart compact' : 'analytics-chart';
+        
         const html = `
             <div class="analytics-grid">
                 <div class="analytics-card">
                     <h3><i class="fas fa-users"></i> Активность пользователей</h3>
-                    <div class="analytics-chart">
-                        ${Object.entries(dailyStats).map(([date, stats]) => {
-                            const height = maxUsers > 0 ? Math.max((stats.users / maxUsers) * 100, 5) : 5;
+                    <div class="${chartClass}">
+                        ${chartData.map(([date, stats]) => {
+                            const heightPercent = maxUsers > 0 ? Math.max((stats.users / maxUsers) * 100, 5) : 5;
+                            const heightPx = (heightPercent / 100) * 200;
                             const dateObj = new Date(date);
                             const day = dateObj.getDate().toString().padStart(2, '0');
                             const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
                             return `
-                            <div class="chart-bar" style="height: ${height}%">
-                                <span class="chart-value">${stats.users}</span>
+                            <div class="chart-bar-wrapper">
                                 <span class="chart-label">${day}.${month}</span>
+                                <div class="chart-bar ${isCompact ? 'compact' : ''}" style="height: ${heightPx}px">
+                                    <span class="chart-value">${stats.users}</span>
+                                </div>
                             </div>
                         `;
                         }).join('')}
@@ -4441,16 +4738,19 @@ async function loadAnalytics() {
                 
                 <div class="analytics-card">
                     <h3><i class="fas fa-file-alt"></i> Активность постов</h3>
-                    <div class="analytics-chart">
-                        ${Object.entries(dailyStats).map(([date, stats]) => {
-                            const height = maxPosts > 0 ? Math.max((stats.posts / maxPosts) * 100, 5) : 5;
+                    <div class="${chartClass}">
+                        ${chartData.map(([date, stats]) => {
+                            const heightPercent = maxPosts > 0 ? Math.max((stats.posts / maxPosts) * 100, 5) : 5;
+                            const heightPx = (heightPercent / 100) * 200;
                             const dateObj = new Date(date);
                             const day = dateObj.getDate().toString().padStart(2, '0');
                             const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
                             return `
-                            <div class="chart-bar" style="height: ${height}%">
-                                <span class="chart-value">${stats.posts}</span>
+                            <div class="chart-bar-wrapper">
                                 <span class="chart-label">${day}.${month}</span>
+                                <div class="chart-bar ${isCompact ? 'compact' : ''}" style="height: ${heightPx}px">
+                                    <span class="chart-value">${stats.posts}</span>
+                                </div>
                             </div>
                         `;
                         }).join('')}
@@ -4459,16 +4759,19 @@ async function loadAnalytics() {
                 
                 <div class="analytics-card">
                     <h3><i class="fas fa-comments"></i> Активность комментариев</h3>
-                    <div class="analytics-chart">
-                        ${Object.entries(dailyStats).map(([date, stats]) => {
-                            const height = maxComments > 0 ? Math.max((stats.comments / maxComments) * 100, 5) : 5;
+                    <div class="${chartClass}">
+                        ${chartData.map(([date, stats]) => {
+                            const heightPercent = maxComments > 0 ? Math.max((stats.comments / maxComments) * 100, 5) : 5;
+                            const heightPx = (heightPercent / 100) * 200;
                             const dateObj = new Date(date);
                             const day = dateObj.getDate().toString().padStart(2, '0');
                             const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
                             return `
-                            <div class="chart-bar" style="height: ${height}%">
-                                <span class="chart-value">${stats.comments}</span>
+                            <div class="chart-bar-wrapper">
                                 <span class="chart-label">${day}.${month}</span>
+                                <div class="chart-bar ${isCompact ? 'compact' : ''}" style="height: ${heightPx}px">
+                                    <span class="chart-value">${stats.comments}</span>
+                                </div>
                             </div>
                         `;
                         }).join('')}
@@ -4719,6 +5022,13 @@ function exportData() {
 
 function handleImportFile(input) {
     const file = input.files[0];
+    const fileNameEl = document.getElementById('importFileName');
+    if (file && fileNameEl) {
+        fileNameEl.textContent = file.name;
+    } else if (fileNameEl) {
+        fileNameEl.textContent = 'Файл не выбран';
+    }
+    
     if (!file) return;
     
     const reader = new FileReader();
@@ -4728,7 +5038,8 @@ function handleImportFile(input) {
             showConfirm('Импорт данных', 'Импортировать данные? Это перезапишет текущую базу данных.', () => {
                 importData(data);
             });
-            return;
+        } catch (error) {
+            showToast('error', 'Ошибка', 'Неверный формат файла');
         }
     };
     reader.readAsText(file);
@@ -4768,13 +5079,11 @@ function importData(data) {
                 DB.saveDB(db);
             }
             
-            showToast('success', 'Импортировано', 'Данные успешно импортированы');
-            location.reload();
-        } catch (error) {
-            showToast('error', 'Ошибка', 'Неверный формат файла');
-        }
-    };
-    reader.readAsText(file);
+        showToast('success', 'Импортировано', 'Данные успешно импортированы');
+        location.reload();
+    } catch (error) {
+        showToast('error', 'Ошибка', 'Неверный формат файла');
+    }
 }
 
 function createBackup() {

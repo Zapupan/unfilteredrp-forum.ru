@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
     <!-- Animated Background -->
@@ -24,7 +25,7 @@
         <div class="nav-container">
             <a href="#" class="logo" onclick="goHome(); return false;">
                 <div class="logo-icon">
-                    <i class="fas fa-gamepad"></i>
+                    <img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-logo-img">
                 </div>
                 <span class="logo-text">UNFILTERED RP</span>
             </a>
@@ -169,7 +170,7 @@
                         <span class="profile-badge user"><i class="fas fa-user"></i> Пользователь</span>
                     </div>
                     <div class="profile-meta">
-                        <span><i class="fas fa-gamepad"></i> <span id="profileRoblox">RobloxNick</span></span>
+                        <span><img src="icons/icons8-roblox-38.png" alt="Roblox" class="roblox-icon" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 4px;"> <span id="profileRoblox">RobloxNick</span></span>
                         <span><i class="fas fa-calendar"></i> Зарегистрирован: <span id="profileDate">01.01.2024</span></span>
                     </div>
                 </div>
@@ -357,7 +358,7 @@
                 <div class="footer-brand">
                     <a href="#" class="logo" onclick="goHome(); return false;">
                         <div class="logo-icon">
-                            <i class="fas fa-gamepad"></i>
+                            <img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-logo-img">
                         </div>
                         <span class="logo-text">UNFILTERED RP</span>
                     </a>
@@ -383,7 +384,7 @@
                     <h4>Сообщество</h4>
                     <ul>
                         <li><a href="https://discord.gg/TcY67aZQTa" target="_blank"><i class="fab fa-discord"></i> Discord</a></li>
-                        <li><a href="#"><i class="fas fa-gamepad"></i> Roblox</a></li>
+                        <li><a href="#"><img src="icons/icons8-roblox-38.png" alt="Roblox" class="roblox-icon" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 4px;"> Roblox</a></li>
                     </ul>
                 </div>
                 <div class="footer-links">
@@ -432,7 +433,7 @@
             <div class="auth-form" id="loginForm">
                 <div class="auth-header">
                     <div class="auth-logo">
-                        <i class="fas fa-gamepad"></i>
+                        <img src="icons/icons8-roblox-100.png" alt="Roblox" class="roblox-logo-img">
                     </div>
                     <h2>Вход в аккаунт</h2>
                     <p>Добро пожаловать в Unfiltered RP!</p>
@@ -480,7 +481,7 @@
                         <input type="text" id="regUsername" placeholder="Придумайте ник (3-20 символов)" required minlength="3" maxlength="20">
                     </div>
                     <div class="form-group">
-                        <label><i class="fas fa-gamepad"></i> Ник в Roblox *</label>
+                        <label><img src="icons/icons8-roblox-38.png" alt="Roblox" class="roblox-icon" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 4px;"> Ник в Roblox *</label>
                         <input type="text" id="regRoblox" placeholder="Ваш ник в игре" required>
                     </div>
                     <div class="form-group">
@@ -521,7 +522,9 @@
                 </div>
             </div>
 
-            <div class="modal-decoration"></div>
+            <div class="modal-decoration">                </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -549,11 +552,19 @@
                 <div class="settings-section">
                     <h4><i class="fas fa-user"></i> Основная информация</h4>
                     <div class="form-group">
-                        <label>Ник в Roblox</label>
+                        <label><i class="fas fa-user"></i> Имя пользователя</label>
+                        <input type="text" id="settingsUsername" placeholder="Ваше имя пользователя" minlength="3" maxlength="20">
+                    </div>
+                    <div class="form-group">
+                        <label><img src="icons/icons8-roblox-38.png" alt="Roblox" class="roblox-icon" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 4px;"> Ник в Roblox</label>
                         <input type="text" id="settingsRoblox" placeholder="Ваш ник в игре">
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
+                        <label><i class="fab fa-discord"></i> Discord</label>
+                        <input type="text" id="settingsDiscord" placeholder="Ваш Discord (например: username#0000)">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email</label>
                         <input type="email" id="settingsEmail" placeholder="Ваш email">
                     </div>
                 </div>
@@ -1175,38 +1186,71 @@
                 </button>
             </div>
             
-            <div class="admin-tabs">
-                <button class="admin-tab active" onclick="switchAdminTab('stats')">
-                    <i class="fas fa-chart-bar"></i> Статистика
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('users')">
-                    <i class="fas fa-users"></i> Пользователи
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('staff')">
-                    <i class="fas fa-user-shield"></i> Персонал
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('applications')">
-                    <i class="fas fa-file-signature"></i> Заявки <span id="applicationsCount" class="tab-badge hidden">0</span>
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('posts')">
-                    <i class="fas fa-file-alt"></i> Посты
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('activity')">
-                    <i class="fas fa-history"></i> Логи
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('comments')">
-                    <i class="fas fa-comments"></i> Комментарии
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('analytics')">
-                    <i class="fas fa-chart-line"></i> Аналитика
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('templates')">
-                    <i class="fas fa-file-alt"></i> Шаблоны
-                </button>
-                <button class="admin-tab" onclick="switchAdminTab('export')">
-                    <i class="fas fa-download"></i> Экспорт/Импорт
-                </button>
-            </div>
+            <div class="admin-panel-wrapper">
+                <div class="admin-sidebar">
+                    <div class="admin-menu-category">
+                        <div class="admin-menu-category-title">Обзор</div>
+                        <button class="admin-menu-item active" onclick="switchAdminTab('stats')">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Статистика</span>
+                        </button>
+                    </div>
+                    
+                    <div class="admin-menu-category">
+                        <div class="admin-menu-category-title">Управление</div>
+                        <button class="admin-menu-item" onclick="switchAdminTab('users')">
+                            <i class="fas fa-users"></i>
+                            <span>Пользователи</span>
+                        </button>
+                        <button class="admin-menu-item" onclick="switchAdminTab('staff')">
+                            <i class="fas fa-user-shield"></i>
+                            <span>Персонал</span>
+                        </button>
+                    </div>
+                    
+                    <div class="admin-menu-category">
+                        <div class="admin-menu-category-title">Модерация</div>
+                        <button class="admin-menu-item" onclick="switchAdminTab('posts')">
+                            <i class="fas fa-file-alt"></i>
+                            <span>Посты</span>
+                        </button>
+                        <button class="admin-menu-item" onclick="switchAdminTab('comments')">
+                            <i class="fas fa-comments"></i>
+                            <span>Комментарии</span>
+                        </button>
+                        <button class="admin-menu-item" onclick="switchAdminTab('applications')">
+                            <i class="fas fa-file-signature"></i>
+                            <span>Заявки</span>
+                            <span id="applicationsCount" class="tab-badge hidden">0</span>
+                        </button>
+                    </div>
+                    
+                    <div class="admin-menu-category">
+                        <div class="admin-menu-category-title">Аналитика</div>
+                        <button class="admin-menu-item" onclick="switchAdminTab('activity')">
+                            <i class="fas fa-history"></i>
+                            <span>Логи</span>
+                        </button>
+                        <button class="admin-menu-item" onclick="switchAdminTab('analytics')">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Аналитика</span>
+                        </button>
+                    </div>
+                    
+                    <div class="admin-menu-category">
+                        <div class="admin-menu-category-title">Настройки</div>
+                        <button class="admin-menu-item" onclick="switchAdminTab('templates')">
+                            <i class="fas fa-file-alt"></i>
+                            <span>Шаблоны</span>
+                        </button>
+                        <button class="admin-menu-item" id="adminTabExportBtn" onclick="switchAdminTab('export')" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            <span>Экспорт/Импорт</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="admin-content-area">
             
             <!-- Stats Tab -->
             <div class="admin-tab-content active" id="adminTabStats">
@@ -1457,10 +1501,13 @@
                     <div class="import-section">
                         <h3><i class="fas fa-upload"></i> Импорт данных</h3>
                         <p>Восстановить данные из резервной копии:</p>
-                        <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
-                        <button class="btn btn-primary" onclick="document.getElementById('importFile').click()">
-                            <i class="fas fa-upload"></i> Выбрать файл
-                        </button>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
+                            <button class="btn btn-primary" onclick="document.getElementById('importFile').click()">
+                                <i class="fas fa-upload"></i> Выбрать файл
+                            </button>
+                            <span id="importFileName" class="file-name">Файл не выбран</span>
+                        </div>
                         <button class="btn btn-danger" onclick="createBackup()">
                             <i class="fas fa-save"></i> Создать резервную копию
                         </button>
@@ -1480,7 +1527,8 @@
                     </div>
                 </div>
             </div>
-            
+                </div>
+            </div>
             
             <!-- User Edit Modal -->
             <div class="admin-user-modal hidden" id="adminUserModal">
@@ -1592,11 +1640,17 @@
             <div class="verification-content">
                 <div class="email-verify-info" id="emailVerifyInfo">
                     <p>Ваш email: <strong id="emailVerifyAddress">загрузка...</strong></p>
-                    <div class="verify-code-display">
+                    <div class="verify-code-display" id="emailCodeDisplaySection" style="display: none;">
                         <p>Ваш код подтверждения:</p>
                         <div class="verify-code-box large">
                             <code id="emailDisplayCode">------</code>
                         </div>
+                        <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Код также отправлен на вашу почту</p>
+                    </div>
+                    <div id="emailSentMessage" style="text-align: center; padding: 20px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; margin: 16px 0;">
+                        <i class="fas fa-envelope" style="font-size: 32px; color: var(--primary-400); margin-bottom: 12px;"></i>
+                        <p style="color: var(--text-secondary); margin: 0;">Код подтверждения отправлен на вашу почту</p>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">Проверьте папку "Входящие" или "Спам"</p>
                     </div>
                 </div>
                 
@@ -1622,7 +1676,7 @@
         <div class="modal modal-lg" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <div>
-                    <h2 class="modal-title"><i class="fas fa-gamepad"></i> Верификация Roblox</h2>
+                    <h2 class="modal-title"><img src="icons/icons8-roblox-50.png" alt="Roblox" class="roblox-icon" width="20" height="20" style="display: inline-block; vertical-align: middle; margin-right: 8px;"> Верификация Roblox</h2>
                     <p class="modal-subtitle">Подтвердите, что вы владеете аккаунтом <span id="robloxNickDisplay"></span></p>
                 </div>
                 <button class="modal-close" onclick="closeRobloxVerifyModal()">
