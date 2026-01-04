@@ -359,8 +359,8 @@ const api = {
         };
     },
     
-    handleRegister({ username, email, password, robloxNick }) {
-        if (!username || !email || !password || !robloxNick) {
+    handleRegister({ username, email, password, robloxNick, rod }) {
+        if (!username || !email || !password || !robloxNick || !rod) {
             throw new Error('Заполните все поля');
         }
         if (username.length < 3 || username.length > 20) {
@@ -387,6 +387,7 @@ const api = {
             email,
             password: DB.hashPassword(password),
             roblox_nick: robloxNick,
+            rod: rod.trim(),
             avatar: randomAvatar,
             avatar_url: null,
             role: 'user',
@@ -539,6 +540,7 @@ const api = {
         }
         if (updates.robloxNick) changes.roblox_nick = updates.robloxNick;
         if (updates.discord !== undefined) changes.discord = updates.discord || null;
+        if (updates.rod !== undefined) changes.rod = updates.rod ? updates.rod.trim() : null;
         if (updates.email && updates.email !== user.email) {
             const existing = DB.getAll('users', u => u.email === updates.email && u.id !== userId);
             if (existing.length > 0) throw new Error('Email уже используется');
@@ -1238,6 +1240,7 @@ const api = {
             username: user.username,
             email: user.email,
             roblox_nick: user.roblox_nick,
+            rod: user.rod || null,
             discord: user.discord || null,
             avatar: user.avatar,
             avatar_url: user.avatar_url,
@@ -1651,7 +1654,7 @@ async function handleRegister(e) {
     const passwordConfirm = document.getElementById('regPasswordConfirm').value;
     const agreeTerms = document.getElementById('agreeTerms').checked;
     
-    if (!username || !email || !robloxNick || !password) {
+    if (!username || !email || !robloxNick || !rod || !password) {
         showToast('error', 'Ошибка', 'Заполните все обязательные поля');
         return;
     }
@@ -1685,6 +1688,7 @@ async function handleRegister(e) {
 async function continueRegistration(email) {
     const username = document.getElementById('regUsername').value.trim();
     const robloxNick = document.getElementById('regRoblox').value.trim();
+    const rod = document.getElementById('regRod').value.trim();
     const password = document.getElementById('regPassword').value;
     const passwordConfirm = document.getElementById('regPasswordConfirm').value;
     const agreeTerms = document.getElementById('agreeTerms').checked;
@@ -1701,11 +1705,12 @@ async function continueRegistration(email) {
     
     try {
         const response = await api.post('/api/auth/register', {
-        username,
-        email,
-        password,
-  robloxNick
-});
+            username,
+            email,
+            password,
+            robloxNick,
+            rod
+        });
         api.setToken(response.token);
         currentUser = response.user;
         localStorage.setItem('urp_user', JSON.stringify(currentUser));
@@ -2996,6 +3001,7 @@ async function openProfile(userId = null) {
         if (profileMeta) {
             profileMeta.innerHTML = `
                 ${profileUser.roblox_nick ? `<span>${getRobloxIcon(14)} <span id="profileRoblox">${profileUser.roblox_nick}</span></span>` : ''}
+                ${profileUser.rod ? `<span><i class="fas fa-map-marker-alt"></i> <span id="profileRod">${escapeHtml(profileUser.rod)}</span></span>` : ''}
                 ${profileUser.discord ? `<span><i class="fab fa-discord"></i> <span id="profileDiscord">${escapeHtml(profileUser.discord)}</span></span>` : ''}
                 <span><i class="fas fa-calendar"></i> <span id="profileDate">${new Date(profileUser.created_at).toLocaleDateString('ru-RU')}</span></span>
             `;
@@ -3089,6 +3095,7 @@ function openSettings() {
     document.getElementById('settingsUsername').value = currentUser.username || '';
     document.getElementById('settingsRoblox').value = currentUser.roblox_nick || '';
     document.getElementById('settingsDiscord').value = currentUser.discord || '';
+    document.getElementById('settingsRod').value = currentUser.rod || '';
     document.getElementById('settingsEmail').value = currentUser.email || '';
     
     // Render avatar upload area
@@ -3162,12 +3169,13 @@ async function saveSettings(e) {
     const username = document.getElementById('settingsUsername').value.trim();
     const robloxNick = document.getElementById('settingsRoblox').value.trim();
     const discord = document.getElementById('settingsDiscord').value.trim();
+    const rod = document.getElementById('settingsRod').value.trim();
     const email = document.getElementById('settingsEmail').value.trim();
     const currentPassword = document.getElementById('settingsCurrentPassword').value;
     const newPassword = document.getElementById('settingsNewPassword').value;
     
     try {
-        const updates = { username, robloxNick, discord, email };
+        const updates = { username, robloxNick, discord, rod, email };
         if (selectedAvatar) updates.avatar = selectedAvatar;
         if (newPassword) {
             updates.currentPassword = currentPassword;
