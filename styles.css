@@ -299,6 +299,13 @@ body {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
 }
 
+.logo-icon .roblox-logo-img {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    filter: brightness(0) invert(1); /* Делает логотип белым */
+}
+
 .logo-text {
     font-size: 18px;
     font-weight: 700;
@@ -1372,6 +1379,7 @@ body {
 }
 
 .social-btn.discord { background: var(--discord); }
+.social-btn.youtube { background: #FF0000; }
 .social-btn:hover { transform: translateY(-3px); }
 
 .footer-links h4 { font-size: 14px; font-weight: 600; margin-bottom: 20px; }
