@@ -196,10 +196,8 @@ const api = {
                 return this.handleVerifyEmail(body);
             } else if (endpoint.startsWith('/auth/resend-email-code') && method === 'POST') {
                 return this.handleResendEmailCode();
-            } else if (endpoint.startsWith('/auth/start-roblox-verification') && method === 'POST') {
-                return this.handleStartRobloxVerification();
-            } else if (endpoint.startsWith('/auth/check-roblox-verification') && method === 'POST') {
-                return this.handleCheckRobloxVerification();
+            } else if (endpoint.startsWith('/auth/verify-roblox-userid') && method === 'POST') {
+                return this.handleVerifyRobloxByUserId(body);
             } else if (endpoint.startsWith('/posts') && method === 'GET') {
                 if (endpoint.includes('/comments')) {
                     const postId = endpoint.split('/posts/')[1].split('/')[0];
@@ -412,20 +410,10 @@ const api = {
         const token = 'token_' + user.id;
         this.setToken(token);
         
-        // Отправляем email с кодом верификации (асинхронно, не блокируем ответ)
-        sendVerificationEmail(email, emailCode, username).then(sent => {
-            if (sent) {
-                console.log('Email с кодом верификации отправлен');
-            }
-        }).catch(err => {
-            console.error('Ошибка отправки email:', err);
-        });
-        
         return {
             token,
             user: this.formatUser(user),
-            emailSent: true, // Предполагаем что отправлено (асинхронная отправка)
-            emailCode: emailCode // Return code for display (fallback если email не отправился)
+            emailCode: emailCode // Код для отображения на экране
         };
     },
     
@@ -489,45 +477,34 @@ const api = {
         const codeExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
         DB.update('users', userId, { email_code: emailCode, email_code_expires: codeExpires });
         
-        // Отправляем email с новым кодом
-        sendVerificationEmail(user.email, emailCode, user.username).then(sent => {
-            if (sent) {
-                console.log('Email с новым кодом верификации отправлен');
-            }
-        }).catch(err => {
-            console.error('Ошибка отправки email:', err);
-        });
-        
         return { code: emailCode };
     },
     
-    handleStartRobloxVerification() {
+    handleVerifyRobloxByUserId({ robloxUserId }) {
         const userId = this.getUserId();
         if (!userId) throw new Error('Unauthorized');
         const user = DB.get('users', userId);
         if (!user) throw new Error('User not found');
-        const code = 'URPV-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+        
+        // Проверяем формат User ID (должен быть числом)
+        if (!robloxUserId || !/^\d+$/.test(robloxUserId.toString())) {
+            throw new Error('User ID должен быть числом');
+        }
+        
+        // Сохраняем User ID и верифицируем аккаунт
+        DB.update('users', userId, { 
+            is_roblox_verified: true,
+            roblox_user_id: robloxUserId.toString()
+        });
+        
         DB.insert('roblox_verifications', {
             user_id: userId,
             roblox_nick: user.roblox_nick,
-            verification_code: code,
-            status: 'pending',
+            roblox_user_id: robloxUserId.toString(),
+            status: 'verified',
             created_at: new Date().toISOString()
         });
-        return { code };
-    },
-    
-    handleCheckRobloxVerification() {
-        const userId = this.getUserId();
-        if (!userId) throw new Error('Unauthorized');
-        const verifications = DB.getAll('roblox_verifications', v => v.user_id === userId && v.status === 'pending');
-        if (verifications.length === 0) {
-            throw new Error('Код верификации не найден');
-        }
-        // In real implementation, this would check Roblox API
-        // For now, just mark as verified
-        DB.update('users', userId, { is_roblox_verified: true });
-        verifications.forEach(v => DB.update('roblox_verifications', v.id, { status: 'verified' }));
+        
         return { success: true };
     },
     
@@ -1899,17 +1876,10 @@ async function openEmailVerifyModal() {
         const data = await api.get('/auth/email-code');
         document.getElementById('emailVerifyAddress').textContent = data.email;
         
-        // Проверяем, настроен ли EmailJS
-        const emailjsConfigured = EMAILJS_CONFIG.PUBLIC_KEY !== 'YOUR_PUBLIC_KEY' && typeof emailjs !== 'undefined';
-        
-        if (emailjsConfigured) {
-            // Если EmailJS настроен, скрываем код и показываем сообщение об отправке
-            document.getElementById('emailCodeDisplaySection').style.display = 'none';
-            document.getElementById('emailSentMessage').style.display = 'block';
-        } else {
-            // Если EmailJS не настроен, показываем код на экране
-            document.getElementById('emailCodeDisplaySection').style.display = 'block';
-            document.getElementById('emailSentMessage').style.display = 'none';
+        // Всегда показываем код на экране
+        const codeDisplaySection = document.getElementById('emailCodeDisplaySection');
+        if (codeDisplaySection) {
+            codeDisplaySection.style.display = 'block';
             document.getElementById('emailDisplayCode').textContent = data.code;
         }
     } catch (error) {
@@ -1948,19 +1918,13 @@ async function refreshEmailCode() {
     try {
         const data = await api.post('/auth/resend-email-code');
         
-        // Проверяем, настроен ли EmailJS
-        const emailjsConfigured = EMAILJS_CONFIG.PUBLIC_KEY !== 'YOUR_PUBLIC_KEY' && typeof emailjs !== 'undefined';
-        
-        if (emailjsConfigured) {
-            // Если EmailJS настроен, код отправлен на email
-            showToast('success', 'Отправлено', 'Новый код отправлен на вашу почту');
-        } else {
-            // Если EmailJS не настроен, показываем код на экране
+        // Всегда показываем код на экране
+        const codeDisplaySection = document.getElementById('emailCodeDisplaySection');
+        if (codeDisplaySection) {
+            codeDisplaySection.style.display = 'block';
             document.getElementById('emailDisplayCode').textContent = data.code;
-            document.getElementById('emailCodeDisplaySection').style.display = 'block';
-            document.getElementById('emailSentMessage').style.display = 'none';
-            showToast('success', 'Готово', 'Новый код сгенерирован');
         }
+        showToast('success', 'Готово', 'Новый код сгенерирован');
     } catch (error) {
         showToast('error', 'Ошибка', error.message);
     }
@@ -1969,9 +1933,8 @@ async function refreshEmailCode() {
 // ===== ROBLOX VERIFICATION =====
 function openRobloxVerifyModal() {
     document.getElementById('robloxVerifyModal').classList.add('active');
-    document.getElementById('robloxVerifyStep1').classList.remove('hidden');
-    document.getElementById('robloxVerifyStep2').classList.add('hidden');
     document.getElementById('robloxNickDisplay').textContent = currentUser.roblox_nick || '';
+    document.getElementById('robloxUserIdInput').value = '';
     document.body.style.overflow = 'hidden';
 }
 
@@ -1980,39 +1943,24 @@ function closeRobloxVerifyModal() {
     document.body.style.overflow = '';
 }
 
-async function startRobloxVerification() {
-    try {
-        const response = await api.post('/auth/start-roblox-verification');
-        document.getElementById('robloxVerifyCode').textContent = response.code;
-        document.getElementById('robloxVerifyStep1').classList.add('hidden');
-        document.getElementById('robloxVerifyStep2').classList.remove('hidden');
-        showToast('info', 'Код получен', 'Следуйте инструкциям ниже');
-    } catch (error) {
-        showToast('error', 'Ошибка', error.message);
+async function verifyRobloxByUserId() {
+    const robloxUserId = document.getElementById('robloxUserIdInput').value.trim();
+    
+    if (!robloxUserId) {
+        showToast('error', 'Ошибка', 'Введите User ID');
+        return;
     }
-}
-
-function copyRobloxCode() {
-    const code = document.getElementById('robloxVerifyCode').textContent;
-    navigator.clipboard.writeText(code).then(() => {
-        showToast('success', 'Скопировано!', 'Теперь вставьте код в описание профиля Roblox');
-    }).catch(() => {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = code;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        showToast('success', 'Скопировано!', 'Теперь вставьте код в описание профиля Roblox');
-    });
-}
-
-async function checkRobloxVerification() {
-    showToast('info', 'Проверка...', 'Ищем код в вашем профиле Roblox');
+    
+    // Проверка формата (только цифры)
+    if (!/^\d+$/.test(robloxUserId)) {
+        showToast('error', 'Ошибка', 'User ID должен содержать только цифры');
+        return;
+    }
     
     try {
-        await api.post('/auth/check-roblox-verification');
+        showToast('info', 'Проверка...', 'Верификация аккаунта Roblox');
+        await api.post('/auth/verify-roblox-userid', { robloxUserId });
+        
         closeRobloxVerifyModal();
         currentUser.is_roblox_verified = 1;
         localStorage.setItem('urp_user', JSON.stringify(currentUser));
@@ -2022,7 +1970,7 @@ async function checkRobloxVerification() {
             openProfile();
         }
     } catch (error) {
-        showToast('error', 'Код не найден', 'Убедитесь, что добавили код в описание профиля Roblox и сохранили изменения');
+        showToast('error', 'Ошибка', error.message);
     }
 }
 
@@ -5619,9 +5567,7 @@ window.verifyEmail = verifyEmail;
 window.refreshEmailCode = refreshEmailCode;
 window.openRobloxVerifyModal = openRobloxVerifyModal;
 window.closeRobloxVerifyModal = closeRobloxVerifyModal;
-window.startRobloxVerification = startRobloxVerification;
-window.copyRobloxCode = copyRobloxCode;
-window.checkRobloxVerification = checkRobloxVerification;
+window.verifyRobloxByUserId = verifyRobloxByUserId;
 window.useEmailSuggestion = useEmailSuggestion;
 window.loadAdminComments = loadAdminComments;
 window.toggleCommentSelection = toggleCommentSelection;

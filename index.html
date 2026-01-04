@@ -1640,17 +1640,12 @@
             <div class="verification-content">
                 <div class="email-verify-info" id="emailVerifyInfo">
                     <p>Ваш email: <strong id="emailVerifyAddress">загрузка...</strong></p>
-                    <div class="verify-code-display" id="emailCodeDisplaySection" style="display: none;">
+                    <div class="verify-code-display" id="emailCodeDisplaySection">
                         <p>Ваш код подтверждения:</p>
                         <div class="verify-code-box large">
                             <code id="emailDisplayCode">------</code>
                         </div>
-                        <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Код также отправлен на вашу почту</p>
-                    </div>
-                    <div id="emailSentMessage" style="text-align: center; padding: 20px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; margin: 16px 0;">
-                        <i class="fas fa-envelope" style="font-size: 32px; color: var(--primary-400); margin-bottom: 12px;"></i>
-                        <p style="color: var(--text-secondary); margin: 0;">Код подтверждения отправлен на вашу почту</p>
-                        <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">Проверьте папку "Входящие" или "Спам"</p>
+                        <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Введите этот код ниже для подтверждения</p>
                     </div>
                 </div>
                 
@@ -1685,72 +1680,30 @@
             </div>
             
             <div class="verification-content" style="text-align: left;">
-                <div id="robloxVerifyStep1">
-                    <div class="roblox-info-box">
-                        <i class="fas fa-info-circle"></i>
-                        <div>
-                            <strong>Зачем нужна верификация?</strong>
-                            <p>Это подтверждает, что вы являетесь владельцем указанного Roblox аккаунта. Верифицированные пользователи получают специальный значок.</p>
-                        </div>
+                <div class="roblox-info-box">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>Верификация через User ID</strong>
+                        <p>Введите ваш User ID из Roblox для верификации аккаунта. User ID можно найти в URL вашего профиля на сайте roblox.com</p>
                     </div>
-                    <button class="btn btn-primary btn-lg btn-block" onclick="startRobloxVerification()" style="margin-top: 20px;">
-                        <i class="fas fa-play"></i> Начать верификацию
-                    </button>
                 </div>
                 
-                <div id="robloxVerifyStep2" class="hidden">
-                    <div class="roblox-verify-instructions">
-                        <div class="verify-step">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <p><strong>Скопируйте код верификации:</strong></p>
-                                <div class="verify-code-box large">
-                                    <code id="robloxVerifyCode">URPV-XXXXXXXX</code>
-                                    <button class="btn btn-primary btn-sm" onclick="copyRobloxCode()">
-                                        <i class="fas fa-copy"></i> Копировать
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="verify-step">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <p><strong>Откройте настройки профиля Roblox:</strong></p>
-                                <a href="https://www.roblox.com/my/account#!/info" target="_blank" class="btn btn-glass btn-block">
-                                    <i class="fab fa-roblox"></i> Открыть Roblox → Мой профиль → Редактировать
-                                </a>
-                                <div class="roblox-help-text">
-                                    <p>Или вручную: roblox.com → Ваш профиль → "About" (О себе)</p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="verify-step">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <p><strong>Вставьте код в описание профиля:</strong></p>
-                                <div class="roblox-example-box">
-                                    <p>Пример описания:</p>
-                                    <div class="example-text">
-                                        Привет! Я играю в Unfiltered RP<br>
-                                        <span class="highlight">URPV-XXXXXXXX</span>
-                                    </div>
-                                </div>
-                                <p class="small-text">⚠️ Сохраните изменения в Roblox перед проверкой!</p>
-                            </div>
-                        </div>
-                        
-                        <div class="verify-step">
-                            <div class="step-number">4</div>
-                            <div class="step-content">
-                                <p><strong>Нажмите для проверки:</strong></p>
-                                <button class="btn btn-success btn-lg btn-block" onclick="checkRobloxVerification()">
-                                    <i class="fas fa-check-circle"></i> Проверить верификацию
-                                </button>
-                                <p class="small-text" style="margin-top: 10px;">После успешной верификации можете удалить код из описания</p>
-                            </div>
-                        </div>
+                <div style="margin-top: 24px;">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> User ID Roblox *</label>
+                        <input type="text" id="robloxUserIdInput" class="form-control" placeholder="Например: 123456789" maxlength="20" pattern="[0-9]+">
+                        <small style="color: var(--text-muted); margin-top: 8px; display: block;">
+                            <i class="fas fa-question-circle"></i> Как найти User ID? Откройте свой профиль на roblox.com и посмотрите на URL: <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">roblox.com/users/123456789/profile</code> - число после "users/" и есть ваш User ID
+                        </small>
+                    </div>
+                    
+                    <div class="form-actions" style="margin-top: 24px;">
+                        <button class="btn btn-glass" onclick="closeRobloxVerifyModal()">
+                            <i class="fas fa-times"></i> Отмена
+                        </button>
+                        <button class="btn btn-primary btn-lg" onclick="verifyRobloxByUserId()">
+                            <i class="fas fa-check-circle"></i> Подтвердить
+                        </button>
                     </div>
                 </div>
             </div>
